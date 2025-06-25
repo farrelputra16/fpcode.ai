@@ -24,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="flex-grow">{children}</main>
 
         <footer className="text-xs text-gray-500 text-center py-2">
-          © 2025 fpcode.ai • Powered by GROQ
+          © 2025 farrel putra
         </footer>
       </body>
     </html>
