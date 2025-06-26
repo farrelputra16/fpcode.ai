@@ -11,7 +11,8 @@ import {
   FaLightbulb,
   FaImage,
   FaPaperPlane,
-  FaTimesCircle, // Added for clearing image preview
+  FaTimesCircle,
+  FaDownload, // Added for download icon
 } from "react-icons/fa";
 import { useEffect, useRef, useState, useCallback } from "react";
 import Image from "next/image";
@@ -24,7 +25,7 @@ type Message = {
   role: Role;
   content: string;
   image?: string;
-  timestamp: Date; // Add timestamp for potential future use or ordering
+  timestamp: Date;
 };
 
 type RequestBody = {
@@ -48,9 +49,9 @@ export default function ChatBox({ theme }: ChatBoxProps) {
     },
   ]);
   const [showTools, setShowTools] = useState(false);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null); // For displaying image preview
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const [mode, setMode] = useState<ExtendedMode>("chat"); // Default mode
+  const [mode, setMode] = useState<ExtendedMode>("chat");
   const [isRecording, setIsRecording] = useState(false);
   const [loading, setLoading] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
@@ -88,7 +89,7 @@ export default function ChatBox({ theme }: ChatBoxProps) {
     setInput("");
     setLoading(true);
 
-    const currentModeForRequest = imageBase64 ? "image" : mode; // If image is present, force 'image' mode for this request
+    const currentModeForRequest = imageBase64 ? "image" : mode;
 
     const body: RequestBody = {
       prompt: input,
@@ -96,7 +97,6 @@ export default function ChatBox({ theme }: ChatBoxProps) {
     };
     if (imageBase64) body.imageBase64 = imageBase64;
 
-    // Clear image preview and base64 after sending
     setImagePreviewUrl(null);
     setImageBase64(null);
 
@@ -117,7 +117,7 @@ export default function ChatBox({ theme }: ChatBoxProps) {
           timestamp: new Date(),
         },
       ]);
-    } catch (error: unknown) { // Catch as 'unknown' and then assert if needed
+    } catch (error: unknown) {
       console.error("Failed to send message:", error);
       setMessages((prev) => [
         ...prev,
@@ -135,23 +135,22 @@ export default function ChatBox({ theme }: ChatBoxProps) {
       reader.onloadend = () => {
         const base64 = (reader.result as string).split(",")[1];
         setImageBase64(base64);
-        setImagePreviewUrl(reader.result as string); // Set for preview
+        setImagePreviewUrl(reader.result as string);
         setMessages((prev) => [
           ...prev,
           { role: "system", content: "🖼️ Image ready for your prompt. Type your question and send!", timestamp: new Date() },
         ]);
-        setMode("image"); // Automatically switch to image mode
+        setMode("image");
       };
       reader.readAsDataURL(file);
     }
-    // Reset file input to allow re-uploading the same file after deletion
     e.target.value = '';
   };
 
   const clearImagePreview = () => {
     setImagePreviewUrl(null);
     setImageBase64(null);
-    setMode("chat"); // Revert to chat mode if image is cleared
+    setMode("chat");
     setMessages((prev) => [
         ...prev,
         { role: "system", content: "🖼️ Image preview cleared. Switched to Chat mode.", timestamp: new Date() },
@@ -275,12 +274,11 @@ export default function ChatBox({ theme }: ChatBoxProps) {
       return new ArrayBuffer(0);
     }
 
-    // Type assertions for window.AudioContext and window.OfflineAudioContext
     const AudioContext = (window as typeof globalThis & { AudioContext: new (contextOptions?: AudioContextOptions) => AudioContext }).AudioContext ||
-     // @ts-expect-error error
+                         // @ts-expect-error error
                          (window as typeof globalThis & { webkitAudioContext: new (contextOptions?: AudioContextOptions) => AudioContext }).webkitAudioContext;
     const OfflineAudioContext = (window as typeof globalThis & { OfflineAudioContext: new (numberOfChannels: number, length: number, sampleRate: number) => OfflineAudioContext }).OfflineAudioContext ||
-     // @ts-expect-error error
+                                // @ts-expect-error error
                                 (window as typeof globalThis & { webkitOfflineAudioContext: new (numberOfChannels: number, length: number, sampleRate: number) => OfflineAudioContext }).webkitOfflineAudioContext;
 
     if (!AudioContext || !OfflineAudioContext) {
@@ -319,6 +317,38 @@ export default function ChatBox({ theme }: ChatBoxProps) {
     audio.play();
   };
 
+  const handleDownloadImage = (base64Image: string) => {
+    const link = document.createElement('a');
+    link.href = `data:image/png;base64,${base64Image}`;
+    link.download = `generated-image-${new Date().getTime()}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Function to render message content with clickable links
+  const renderMessageContent = (content: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+
+    return parts.map((part, index) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:underline"
+          >
+            {part}
+          </a>
+        );
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
@@ -328,7 +358,7 @@ export default function ChatBox({ theme }: ChatBoxProps) {
       textareaRef.current.style.height = "auto";
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
-  }, [input, imagePreviewUrl]); // Re-adjust height if image preview changes
+  }, [input, imagePreviewUrl]);
 
   // Dynamic theme colors
   const bgColor = theme === "dark" ? "bg-gray-800" : "bg-white";
@@ -350,7 +380,7 @@ export default function ChatBox({ theme }: ChatBoxProps) {
       {/* Chat Display Area */}
       <div
         ref={chatRef}
-        className="flex-grow overflow-y-auto p-6 space-y-6"
+        className="flex-grow overflow-y-auto p-6 space-y-6 w-full md:max-w-5xl mx-auto" // Increased max-width to 5xl
       >
         {messages.map((msg, i) => (
           <div
@@ -371,9 +401,9 @@ export default function ChatBox({ theme }: ChatBoxProps) {
                   <FaLightbulb />
                 )}
               </span>
-              <div className="flex flex-col flex-grow">
-                <span className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
-                  {msg.content}
+              <div className="flex flex-col flex-grow w-full">
+                <span className="whitespace-pre-wrap leading-relaxed text-sm md:text-base break-words">
+                  {renderMessageContent(msg.content)}
                 </span>
                 {msg.image && (
                   <div className="relative w-full h-48 md:h-64 rounded-lg overflow-hidden mt-3 border border-gray-400">
@@ -381,15 +411,20 @@ export default function ChatBox({ theme }: ChatBoxProps) {
                       src={`data:image/jpeg;base64,${msg.image}`}
                       alt="Generated"
                       layout="fill"
-                      objectFit="cover" // Changed to cover for better filling
+                      objectFit="cover"
                       className="rounded-lg"
                     />
+                    {msg.role === "bot" && (
+                      <button
+                        onClick={() => handleDownloadImage(msg.image!)}
+                        className="absolute bottom-2 right-2 bg-black bg-opacity-60 text-white p-2 rounded-full text-lg hover:bg-opacity-80 transition-opacity"
+                        title="Download Image"
+                      >
+                        <FaDownload />
+                      </button>
+                    )}
                   </div>
                 )}
-                {/* Optional: Add timestamp */}
-                {/* <span className="text-xs text-right mt-1 opacity-70">
-                  {msg.timestamp.toLocaleTimeString()}
-                </span> */}
               </div>
             </div>
           </div>
@@ -413,9 +448,9 @@ export default function ChatBox({ theme }: ChatBoxProps) {
       </div>
 
       {/* Input Area */}
-      <div className={`p-4 border-t ${borderColor} ${theme === "dark" ? "bg-gray-900" : "bg-gray-50"}`}>
+      <div className={`p-4 border-t ${borderColor} ${theme === "dark" ? "bg-gray-900" : "bg-gray-50"} flex flex-col items-center`}>
         {imagePreviewUrl && (
-          <div className="relative w-32 h-32 mb-4 rounded-lg overflow-hidden border border-gray-400 mx-auto md:mx-0">
+          <div className="relative w-32 h-32 mb-4 rounded-lg overflow-hidden border border-gray-400">
             <Image
               src={imagePreviewUrl}
               alt="Image Preview"
@@ -433,15 +468,47 @@ export default function ChatBox({ theme }: ChatBoxProps) {
           </div>
         )}
 
-        {mode !== "chat" && mode !== "image" && ( // Show active mode indicator
-          <div className={`mb-3 py-1 px-3 rounded-full text-sm font-semibold inline-flex items-center gap-2 ${activeModeBgColor}`}>
+        {mode !== "chat" && mode !== "image" && (
+          // Adjusted class to ensure it's left-aligned and still uses flex for its internal content
+          <div className={`mb-3 py-1 px-3 rounded-full text-sm font-semibold flex items-center gap-2 ${activeModeBgColor} self-start`}>
             {getIcon(mode)} {mode.toUpperCase()} Mode Active
           </div>
         )}
 
-        <form onSubmit={sendMessage} className="flex flex-col gap-3 w-full">
-          {/* Top row of buttons */}
-          <div className="flex items-center gap-3">
+        <form onSubmit={sendMessage} className="flex flex-col gap-3 w-full md:max-w-5xl"> {/* Increased max-width to 5xl */}
+          {/* Textarea and Send Button */}
+          <div className="flex items-end gap-3 w-full">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
+              rows={1}
+              placeholder={`Send message in ${mode.toUpperCase()} mode...`}
+              className={`flex-grow resize-none rounded-full py-3 px-5 ${inputBgColor} ${inputTextColor} ${placeholderColor} text-sm md:text-base focus:outline-none border ${borderColor} focus:ring-2 ${
+                theme === "dark" ? "focus:ring-blue-500" : "focus:ring-blue-400"
+              } transition-all duration-200`}
+              style={{ maxHeight: "200px", overflowY: "auto" }}
+            />
+
+            {/* Send Button */}
+            <button
+              type="submit"
+              disabled={loading || (!input.trim() && !imageBase64)}
+              className={`${buttonBgColor} ${buttonTextColor} p-3 rounded-full text-xl shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0`}
+              title="Send Message"
+            >
+              <FaPaperPlane />
+            </button>
+          </div>
+
+          {/* Bottom row of buttons (Tools, Image Upload, Microphone) */}
+          <div className="flex items-center justify-start gap-3 w-full">
             {/* File Upload Button */}
             <label
               htmlFor="imageUpload"
@@ -510,37 +577,6 @@ export default function ChatBox({ theme }: ChatBoxProps) {
               }`}
             >
               <FaMicrophone />
-            </button>
-          </div>
-
-          {/* Textarea and Send Button */}
-          <div className="flex items-end gap-3 w-full">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
-                }
-              }}
-              rows={1}
-              placeholder={`Send message in ${mode.toUpperCase()} mode...`}
-              className={`flex-grow resize-none rounded-full py-3 px-5 ${inputBgColor} ${inputTextColor} ${placeholderColor} text-sm md:text-base focus:outline-none border ${borderColor} focus:ring-2 ${
-                theme === "dark" ? "focus:ring-blue-500" : "focus:ring-blue-400"
-              } transition-all duration-200`}
-              style={{ maxHeight: "200px", overflowY: "auto" }}
-            />
-
-            {/* Send Button */}
-            <button
-              type="submit"
-              disabled={loading || (!input.trim() && !imageBase64)}
-              className={`${buttonBgColor} ${buttonTextColor} p-3 rounded-full text-xl shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0`}
-              title="Send Message"
-            >
-              <FaPaperPlane />
             </button>
           </div>
         </form>
