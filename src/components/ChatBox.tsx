@@ -439,105 +439,110 @@ export default function ChatBox({ theme }: ChatBoxProps) {
           </div>
         )}
 
-        <form onSubmit={sendMessage} className="flex items-end gap-3 w-full">
-          {/* File Upload Button */}
-          <label
-            htmlFor="imageUpload"
-            className={`${toolButtonBgColor} ${toolButtonTextColor} p-3 rounded-full cursor-pointer transition-all duration-200 text-xl flex-shrink-0`}
-            title="Upload Image"
-          >
-            <FaImage />
-            <input
-              type="file"
-              accept="image/*"
-              id="imageUpload"
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-          </label>
+        <form onSubmit={sendMessage} className="flex flex-col gap-3 w-full">
+          {/* Top row of buttons */}
+          <div className="flex items-center gap-3">
+            {/* File Upload Button */}
+            <label
+              htmlFor="imageUpload"
+              className={`${toolButtonBgColor} ${toolButtonTextColor} p-3 rounded-full cursor-pointer transition-all duration-200 text-xl flex-shrink-0`}
+              title="Upload Image"
+            >
+              <FaImage />
+              <input
+                type="file"
+                accept="image/*"
+                id="imageUpload"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+            </label>
 
-          {/* Tools Dropdown */}
-          <div className="relative flex-shrink-0">
+            {/* Tools Dropdown */}
+            <div className="relative flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowTools(!showTools)}
+                className={`${toolButtonBgColor} ${toolButtonTextColor} px-4 py-3 rounded-full flex items-center gap-2 transition-all duration-200 text-sm md:text-base`}
+                title="Select Tool"
+              >
+                Tools <FaChevronDown className="text-xs ml-1" />
+              </button>
+              {showTools && (
+                <div
+                  className={`absolute bottom-full mb-2 left-0 right-0 md:w-auto min-w-[160px] ${dropdownBgColor} border ${borderColor} rounded-lg shadow-xl z-50 text-sm ${dropdownTextColor}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setToolMode("reasoning")}
+                    className={`flex items-center w-full gap-2 px-4 py-3 ${dropdownHoverBgColor} rounded-t-lg text-left text-base`}
+                  >
+                    <FaLightbulb />
+                    Reasoning
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setToolMode("websearch")}
+                    className={`flex items-center w-full gap-2 px-4 py-3 ${dropdownHoverBgColor} text-left text-base`}
+                  >
+                    <FaGlobe />
+                    Web Search
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setToolMode("imagegen")}
+                    className={`flex items-center w-full gap-2 px-4 py-3 ${dropdownHoverBgColor} rounded-b-lg text-left text-base`}
+                  >
+                    <FaPlus />
+                    Image Generator
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Microphone Button */}
             <button
               type="button"
-              onClick={() => setShowTools(!showTools)}
-              className={`${toolButtonBgColor} ${toolButtonTextColor} px-4 py-3 rounded-full flex items-center gap-2 transition-all duration-200 text-sm md:text-base`}
-              title="Select Tool"
+              title={isRecording ? "Stop Recording" : "Start Voice"}
+              onClick={isRecording ? stopRecording : startRecording}
+              className={`p-3 rounded-full transition-all duration-200 text-xl flex-shrink-0 ${
+                isRecording ? "bg-red-600 text-white hover:bg-red-700" : `${toolButtonBgColor} ${toolButtonTextColor}`
+              }`}
             >
-              Tools <FaChevronDown className="text-xs ml-1" />
+              <FaMicrophone />
             </button>
-            {showTools && (
-              <div
-                className={`absolute bottom-full mb-2 left-0 right-0 md:w-auto min-w-[160px] ${dropdownBgColor} border ${borderColor} rounded-lg shadow-xl z-50 text-sm ${dropdownTextColor}`}
-              >
-                <button
-                  type="button"
-                  onClick={() => setToolMode("reasoning")}
-                  className={`flex items-center w-full gap-2 px-4 py-3 ${dropdownHoverBgColor} rounded-t-lg text-left text-base`}
-                >
-                  <FaLightbulb />
-                  Reasoning
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setToolMode("websearch")}
-                  className={`flex items-center w-full gap-2 px-4 py-3 ${dropdownHoverBgColor} text-left text-base`}
-                >
-                  <FaGlobe />
-                  Web Search
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setToolMode("imagegen")}
-                  className={`flex items-center w-full gap-2 px-4 py-3 ${dropdownHoverBgColor} rounded-b-lg text-left text-base`}
-                >
-                  <FaPlus />
-                  Image Generator
-                </button>
-              </div>
-            )}
           </div>
 
-          {/* Textarea Input */}
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-              }
-            }}
-            rows={1}
-            placeholder={`Send message in ${mode.toUpperCase()} mode...`}
-            className={`flex-grow resize-none rounded-full py-3 px-5 ${inputBgColor} ${inputTextColor} ${placeholderColor} text-sm md:text-base focus:outline-none border ${borderColor} focus:ring-2 ${
-              theme === "dark" ? "focus:ring-blue-500" : "focus:ring-blue-400"
-            } transition-all duration-200`}
-            style={{ maxHeight: "200px", overflowY: "auto" }}
-          />
+          {/* Textarea and Send Button */}
+          <div className="flex items-end gap-3 w-full">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
+              rows={1}
+              placeholder={`Send message in ${mode.toUpperCase()} mode...`}
+              className={`flex-grow resize-none rounded-full py-3 px-5 ${inputBgColor} ${inputTextColor} ${placeholderColor} text-sm md:text-base focus:outline-none border ${borderColor} focus:ring-2 ${
+                theme === "dark" ? "focus:ring-blue-500" : "focus:ring-blue-400"
+              } transition-all duration-200`}
+              style={{ maxHeight: "200px", overflowY: "auto" }}
+            />
 
-          {/* Microphone Button */}
-          <button
-            type="button"
-            title={isRecording ? "Stop Recording" : "Start Voice"}
-            onClick={isRecording ? stopRecording : startRecording}
-            className={`p-3 rounded-full transition-all duration-200 text-xl flex-shrink-0 ${
-              isRecording ? "bg-red-600 text-white hover:bg-red-700" : `${toolButtonBgColor} ${toolButtonTextColor}`
-            }`}
-          >
-            <FaMicrophone />
-          </button>
-
-          {/* Send Button */}
-          <button
-            type="submit"
-            disabled={loading || (!input.trim() && !imageBase64)}
-            className={`${buttonBgColor} ${buttonTextColor} p-3 rounded-full text-xl shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0`}
-            title="Send Message"
-          >
-            <FaPaperPlane />
-          </button>
+            {/* Send Button */}
+            <button
+              type="submit"
+              disabled={loading || (!input.trim() && !imageBase64)}
+              className={`${buttonBgColor} ${buttonTextColor} p-3 rounded-full text-xl shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0`}
+              title="Send Message"
+            >
+              <FaPaperPlane />
+            </button>
+          </div>
         </form>
       </div>
     </div>
