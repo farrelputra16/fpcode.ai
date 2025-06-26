@@ -10,13 +10,15 @@ import {
   FaLightbulb,
 } from "react-icons/fa";
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 
 type Role = "user" | "bot" | "system";
-type Mode = "chat" | "image" | "reasoning" | "websearch";
+type Mode = "chat" | "image" | "reasoning" | "websearch" | "imagegen";
 
 type Message = {
   role: Role;
   content: string;
+  image?: string;
 };
 
 type RequestBody = {
@@ -67,7 +69,11 @@ export default function ChatBox() {
     const data = await res.json();
     setMessages((prev) => [
       ...prev,
-      { role: "bot", content: `${getIcon(body.type)} ${data.message}` },
+      {
+        role: "bot",
+        content: `${getIcon(body.type)} ${data.message}`,
+        ...(data.imageBase64 && { image: data.imageBase64 }),
+      },
     ]);
     setImageBase64(null);
     setMode("chat");
@@ -113,6 +119,8 @@ export default function ChatBox() {
         return "🧠";
       case "websearch":
         return "🌐";
+      case "imagegen":
+        return "🎨";
       default:
         return "🤖";
     }
@@ -133,7 +141,7 @@ export default function ChatBox() {
   }, [input]);
 
   return (
-    <div className="w-full max-w-6xl mx-auto flex flex-col gap-6 mt-10 px-4">
+    <div className="w-full max-w-6xl mx-auto flex flex-col gap-6 mt-10 px-4 font-sans">
       <div
         ref={chatRef}
         className="bg-[#1a1a1f] border border-[#333] rounded-2xl p-6 h-[65vh] overflow-y-auto space-y-5 text-base"
@@ -152,16 +160,31 @@ export default function ChatBox() {
                   : msg.role === "system"
                   ? "bg-blue-900 text-blue-100"
                   : "bg-[#dfbfc9] text-black"
-              } p-4 rounded-2xl max-w-[80%] flex items-start gap-3 shadow-md`}
+              } p-4 rounded-2xl max-w-[80%] flex flex-col gap-2 shadow-md`}
             >
-              {msg.role === "bot" ? (
-                <FaRobot className="mt-1" />
-              ) : msg.role === "user" ? (
-                <FaUser className="mt-1" />
-              ) : (
-                <FaLightbulb className="mt-1" />
+              <div className="flex items-start gap-3">
+                {msg.role === "bot" ? (
+                  <FaRobot className="mt-1" />
+                ) : msg.role === "user" ? (
+                  <FaUser className="mt-1" />
+                ) : (
+                  <FaLightbulb className="mt-1" />
+                )}
+                <span className="whitespace-pre-wrap font-medium leading-relaxed text-sm sm:text-base">
+                  {msg.content}
+                </span>
+              </div>
+              {msg.image && (
+                <div className="relative w-full h-64 rounded-xl overflow-hidden mt-2">
+                  <Image
+                    src={`data:image/jpeg;base64,${msg.image}`}
+                    alt="Generated"
+                    layout="fill"
+                    objectFit="contain"
+                    className="rounded-xl"
+                  />
+                </div>
               )}
-              <span className="whitespace-pre-wrap">{msg.content}</span>
             </div>
           </div>
         ))}
@@ -209,6 +232,14 @@ export default function ChatBox() {
                 <FaGlobe className="text-[#dfbfc9]" />
                 Web Search
               </button>
+              <button
+                type="button"
+                onClick={() => setToolMode("imagegen")}
+                className="flex items-center w-full gap-2 px-4 py-2 hover:bg-[#444]"
+              >
+                <FaPlus className="text-[#dfbfc9]" />
+                Image Generator
+              </button>
             </div>
           )}
         </div>
@@ -231,6 +262,8 @@ export default function ChatBox() {
               ? "Type your reasoning question..."
               : mode === "websearch"
               ? "Type your search query..."
+              : mode === "imagegen"
+              ? "Type your image idea to generate..."
               : "Type your message..."
           }
           className="flex-grow resize-none rounded-xl p-4 bg-[#2f2f2f] text-[#dfbfc9] placeholder-gray-400 text-sm focus:outline-none border border-gray-600 focus:ring-2 focus:ring-[#dfbfc9]"
