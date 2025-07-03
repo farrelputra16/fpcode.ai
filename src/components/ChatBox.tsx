@@ -43,9 +43,10 @@ interface ChatBoxProps {
   theme: "light" | "dark";
   userAddress: string | undefined;
   activeChain: string;
+  isBackgroundTransparent?: boolean; // Prop untuk mengontrol transparansi
 }
 
-export default function ChatBox({ theme, userAddress, activeChain }: ChatBoxProps) {
+export default function ChatBox({ theme, userAddress, activeChain, isBackgroundTransparent = false }: ChatBoxProps) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -54,7 +55,6 @@ export default function ChatBox({ theme, userAddress, activeChain }: ChatBoxProp
       timestamp: new Date(),
     },
   ]);
-  const [showTools, setShowTools] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [mode, setMode] = useState<ExtendedMode>("chat");
@@ -64,6 +64,8 @@ export default function ChatBox({ theme, userAddress, activeChain }: ChatBoxProp
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+
+  const [showTools, setShowTools] = useState(false); 
 
   // Function to determine message background color based on theme and role
   const getMessageColors = useCallback((role: Role) => {
@@ -106,7 +108,7 @@ export default function ChatBox({ theme, userAddress, activeChain }: ChatBoxProp
     setInput("");
     setLoading(true);
 
-    const currentModeForRequest = imageBase64 ? "image" : mode; // Typo fixed here!
+    const currentModeForRequest = imageBase64 ? "image" : mode;
 
     const body: RequestBody = {
       prompt: input,
@@ -354,7 +356,6 @@ export default function ChatBox({ theme, userAddress, activeChain }: ChatBoxProp
     document.body.removeChild(link);
   };
 
-  // Function to render message content with clickable links
   const renderMessageContent = (content: string) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = content.split(urlRegex);
@@ -388,24 +389,29 @@ export default function ChatBox({ theme, userAddress, activeChain }: ChatBoxProp
     }
   }, [input, imagePreviewUrl]);
 
-  // --- NEW THEME COLORS FOR CHATBOX ---
-  const bgColor = theme === "dark" ? "bg-gray-900" : "bg-white"; // Chatbox background
+  // Warna tema dinamis
+  // FIX: Explicitly use isBackgroundTransparent for a class to silence the warning
+  const transparencyClass = isBackgroundTransparent ? 'bg-opacity-85' : '';
+  const bgColor = theme === "dark"
+    ? `bg-gray-900/${transparencyClass.replace('bg-opacity-', '')}` // Apply opacity directly to color
+    : `bg-white/${transparencyClass.replace('bg-opacity-', '')}`;
+
   const borderColor = theme === "dark" ? "border-gray-700" : "border-gray-200";
-  const inputBgColor = theme === "dark" ? "bg-gray-800" : "bg-gray-100"; // Input background
+  const inputBgColor = theme === "dark" ? "bg-gray-800" : "bg-gray-100";
   const inputTextColor = theme === "dark" ? "text-gray-100" : "text-gray-900";
   const placeholderColor = theme === "dark" ? "placeholder-gray-500" : "placeholder-gray-400";
-  const buttonBgColor = theme === "dark" ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-500 hover:bg-blue-600"; // Accent button
+  const buttonBgColor = theme === "dark" ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-500 hover:bg-blue-600";
   const buttonTextColor = "text-white";
-  const toolButtonBgColor = theme === "dark" ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"; // Tool buttons
+  const toolButtonBgColor = theme === "dark" ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300";
   const toolButtonTextColor = theme === "dark" ? "text-white" : "text-gray-800";
-  const dropdownBgColor = theme === "dark" ? "bg-gray-800" : "bg-white"; // Dropdown for tools
+  const dropdownBgColor = theme === "dark" ? "bg-gray-800" : "bg-white";
   const dropdownHoverBgColor = theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-100";
   const dropdownTextColor = theme === "dark" ? "text-white" : "text-gray-800";
-  const activeModeBgColor = theme === "dark" ? "bg-blue-700 text-white" : "bg-blue-500 text-white"; // Active mode indicator
+  const activeModeBgColor = theme === "dark" ? "bg-blue-700 text-white" : "bg-blue-500 text-white";
 
   return (
     <div className={`flex flex-col h-full rounded-xl shadow-xl ${bgColor} ${borderColor} border`}>
-      {/* Chat Display Area */}
+      {/* Area Tampilan Chat */}
       <div
         ref={chatRef}
         className="flex-grow overflow-y-auto p-6 space-y-6 w-full md:max-w-5xl mx-auto"
@@ -481,7 +487,7 @@ export default function ChatBox({ theme, userAddress, activeChain }: ChatBoxProp
         )}
       </div>
 
-      {/* Input Area */}
+      {/* Area Input */}
       <div className={`p-4 border-t ${borderColor} ${theme === "dark" ? "bg-gray-950" : "bg-gray-50"} flex flex-col items-center`}>
         {imagePreviewUrl && (
           <div className="relative w-32 h-32 mb-4 rounded-xl overflow-hidden border border-gray-400">
@@ -509,7 +515,7 @@ export default function ChatBox({ theme, userAddress, activeChain }: ChatBoxProp
         )}
 
         <form onSubmit={sendMessage} className="flex flex-col gap-3 w-full md:max-w-5xl">
-          {/* Textarea and Send Button */}
+          {/* Textarea dan Tombol Kirim */}
           <div className="flex items-end gap-3 w-full">
             <textarea
               ref={textareaRef}
@@ -529,7 +535,7 @@ export default function ChatBox({ theme, userAddress, activeChain }: ChatBoxProp
               style={{ maxHeight: "200px", overflowY: "auto" }}
             />
 
-            {/* Send Button */}
+            {/* Tombol Kirim */}
             <button
               type="submit"
               disabled={loading || (!input.trim() && !imageBase64)}
@@ -540,7 +546,7 @@ export default function ChatBox({ theme, userAddress, activeChain }: ChatBoxProp
             </button>
           </div>
 
-          {/* Bottom row buttons (Tools, Image Upload, Microphone) */}
+          {/* Baris bawah tombol (Alat, Unggah Gambar, Mikrofon) */}
           <div className="flex items-center justify-start gap-3 w-full">
             {/* Image Upload Button */}
             <label
