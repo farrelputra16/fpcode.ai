@@ -12,7 +12,7 @@ import {
   FaImage,
   FaPaperPlane,
   FaTimesCircle,
-  FaDownload, // Added for download icon
+  FaDownload,
 } from "react-icons/fa";
 import { useEffect, useRef, useState, useCallback } from "react";
 import Image from "next/image";
@@ -26,6 +26,8 @@ type Message = {
   content: string;
   image?: string;
   timestamp: Date;
+  senderAddress?: string;
+  senderChain?: string;
 };
 
 type RequestBody = {
@@ -33,13 +35,17 @@ type RequestBody = {
   imageBase64?: string;
   type: ExtendedMode;
   audioBase64?: string;
+  userAddress?: string;
+  userChain?: string;
 };
 
 interface ChatBoxProps {
   theme: "light" | "dark";
+  userAddress: string | undefined;
+  activeChain: string;
 }
 
-export default function ChatBox({ theme }: ChatBoxProps) {
+export default function ChatBox({ theme, userAddress, activeChain }: ChatBoxProps) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -63,37 +69,50 @@ export default function ChatBox({ theme }: ChatBoxProps) {
   const getMessageColors = useCallback((role: Role) => {
     if (role === "bot") {
       return theme === "dark"
-        ? "bg-gray-700 text-white"
-        : "bg-gray-200 text-gray-800";
+        ? "bg-gray-800 text-gray-100 shadow-xl"
+        : "bg-gray-100 text-gray-800 shadow-lg";
     } else if (role === "system") {
       return theme === "dark"
-        ? "bg-purple-800 text-white"
-        : "bg-purple-200 text-purple-900";
+        ? "bg-gray-700 text-blue-300 shadow-lg"
+        : "bg-blue-100 text-blue-700 shadow-lg";
     } else { // user
       return theme === "dark"
-        ? "bg-blue-600 text-white"
-        : "bg-blue-200 text-gray-800";
+        ? "bg-blue-600 text-white shadow-xl"
+        : "bg-blue-500 text-white shadow-lg";
     }
   }, [theme]);
 
   const sendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+
+    if (!userAddress) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "system", content: "⚠️ Please connect your Solana wallet to send messages. Click 'Connect Wallet' in the header!", timestamp: new Date() },
+      ]);
+      return;
+    }
+
     if (!input.trim() && !imageBase64) return;
 
     const userMsg: Message = {
       role: "user",
-      content: input || (imageBase64 ? "[Image + prompt]" : "[Voice message]"),
+      content: input || (imageBase64 ? "[Image + prompt]" : "[Voice Message]"),
       timestamp: new Date(),
+      senderAddress: userAddress,
+      senderChain: activeChain,
     };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setLoading(true);
 
-    const currentModeForRequest = imageBase64 ? "image" : mode;
+    const currentModeForRequest = imageBase64 ? "image" : mode; // Typo fixed here!
 
     const body: RequestBody = {
       prompt: input,
       type: currentModeForRequest,
+      userAddress: userAddress,
+      userChain: activeChain,
     };
     if (imageBase64) body.imageBase64 = imageBase64;
 
@@ -153,7 +172,7 @@ export default function ChatBox({ theme }: ChatBoxProps) {
     setMode("chat");
     setMessages((prev) => [
         ...prev,
-        { role: "system", content: "🖼️ Image preview cleared. Switched to Chat mode.", timestamp: new Date() },
+        { role: "system", content: "🖼️ Image preview removed. Switched to Chat mode.", timestamp: new Date() },
     ]);
   };
 
@@ -222,6 +241,15 @@ export default function ChatBox({ theme }: ChatBoxProps) {
 
   const handleSendAudio = async () => {
     setLoading(true);
+    if (!userAddress) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "system", content: "⚠️ Please connect your Solana wallet before sending a voice message. Click 'Connect Wallet' in the header!", timestamp: new Date() },
+      ]);
+      setLoading(false);
+      return;
+    }
+
     const blob = new Blob(chunksRef.current, { type: "audio/webm" });
     const arrayBuffer = await blob.arrayBuffer();
     const pcmBuffer = await convertToPCM(arrayBuffer);
@@ -229,14 +257,14 @@ export default function ChatBox({ theme }: ChatBoxProps) {
 
     setMessages((prev) => [
       ...prev,
-      { role: "user", content: "🎤 [Voice message sent]", timestamp: new Date() },
+      { role: "user", content: "🎤 [Voice message sent]", timestamp: new Date(), senderAddress: userAddress, senderChain: activeChain },
     ]);
 
     try {
       const res = await fetch("/api/groq/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "stream", audioBase64 }),
+        body: JSON.stringify({ type: "stream", audioBase64, userAddress, userChain: activeChain }),
       });
 
       const json = await res.json();
@@ -244,7 +272,7 @@ export default function ChatBox({ theme }: ChatBoxProps) {
         playBase64Audio(json.audioBase64);
         setMessages((prev) => [
           ...prev,
-          { role: "bot", content: "🎧 [Audio reply playing...]", timestamp: new Date() },
+          { role: "bot", content: "🎧 [Playing audio response...]", timestamp: new Date() },
         ]);
       } else if (json.message) {
         setMessages((prev) => [
@@ -351,7 +379,7 @@ export default function ChatBox({ theme }: ChatBoxProps) {
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+  }, [messages, loading]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -360,27 +388,27 @@ export default function ChatBox({ theme }: ChatBoxProps) {
     }
   }, [input, imagePreviewUrl]);
 
-  // Dynamic theme colors
-  const bgColor = theme === "dark" ? "bg-gray-800" : "bg-white";
-  const borderColor = theme === "dark" ? "border-gray-700" : "border-gray-300";
-  const inputBgColor = theme === "dark" ? "bg-gray-700" : "bg-gray-100";
-  const inputTextColor = theme === "dark" ? "text-white" : "text-gray-800";
-  const placeholderColor = theme === "dark" ? "placeholder-gray-400" : "placeholder-gray-500";
-  const buttonBgColor = theme === "dark" ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-500 hover:bg-blue-600";
+  // --- NEW THEME COLORS FOR CHATBOX ---
+  const bgColor = theme === "dark" ? "bg-gray-900" : "bg-white"; // Chatbox background
+  const borderColor = theme === "dark" ? "border-gray-700" : "border-gray-200";
+  const inputBgColor = theme === "dark" ? "bg-gray-800" : "bg-gray-100"; // Input background
+  const inputTextColor = theme === "dark" ? "text-gray-100" : "text-gray-900";
+  const placeholderColor = theme === "dark" ? "placeholder-gray-500" : "placeholder-gray-400";
+  const buttonBgColor = theme === "dark" ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-500 hover:bg-blue-600"; // Accent button
   const buttonTextColor = "text-white";
-  const toolButtonBgColor = theme === "dark" ? "bg-gray-600 hover:bg-gray-500" : "bg-gray-300 hover:bg-gray-400";
+  const toolButtonBgColor = theme === "dark" ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"; // Tool buttons
   const toolButtonTextColor = theme === "dark" ? "text-white" : "text-gray-800";
-  const dropdownBgColor = theme === "dark" ? "bg-gray-700" : "bg-white";
-  const dropdownHoverBgColor = theme === "dark" ? "hover:bg-gray-600" : "hover:bg-gray-100";
+  const dropdownBgColor = theme === "dark" ? "bg-gray-800" : "bg-white"; // Dropdown for tools
+  const dropdownHoverBgColor = theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-100";
   const dropdownTextColor = theme === "dark" ? "text-white" : "text-gray-800";
-  const activeModeBgColor = theme === "dark" ? "bg-blue-700 text-white" : "bg-blue-500 text-white";
+  const activeModeBgColor = theme === "dark" ? "bg-blue-700 text-white" : "bg-blue-500 text-white"; // Active mode indicator
 
   return (
-    <div className={`flex flex-col h-full rounded-lg shadow-xl ${bgColor} ${borderColor} border`}>
+    <div className={`flex flex-col h-full rounded-xl shadow-xl ${bgColor} ${borderColor} border`}>
       {/* Chat Display Area */}
       <div
         ref={chatRef}
-        className="flex-grow overflow-y-auto p-6 space-y-6 w-full md:max-w-5xl mx-auto" // Increased max-width to 5xl
+        className="flex-grow overflow-y-auto p-6 space-y-6 w-full md:max-w-5xl mx-auto"
       >
         {messages.map((msg, i) => (
           <div
@@ -390,7 +418,7 @@ export default function ChatBox({ theme }: ChatBoxProps) {
             }`}
           >
             <div
-              className={`flex items-start max-w-[80%] md:max-w-[70%] rounded-xl p-4 shadow-md ${getMessageColors(msg.role)}`}
+              className={`flex items-start max-w-[80%] md:max-w-[70%] rounded-2xl p-4 shadow-md ${getMessageColors(msg.role)}`}
             >
               <span className="mr-3 text-xl flex-shrink-0">
                 {msg.role === "bot" ? (
@@ -405,14 +433,19 @@ export default function ChatBox({ theme }: ChatBoxProps) {
                 <span className="whitespace-pre-wrap leading-relaxed text-sm md:text-base break-words">
                   {renderMessageContent(msg.content)}
                 </span>
+                {msg.role === "user" && msg.senderAddress && (
+                  <p className={`text-xs mt-1 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+                    From: {msg.senderAddress.substring(0, 6)}...{msg.senderAddress.substring(msg.senderAddress.length - 4)}
+                  </p>
+                )}
                 {msg.image && (
-                  <div className="relative w-full h-48 md:h-64 rounded-lg overflow-hidden mt-3 border border-gray-400">
+                  <div className="relative w-full h-48 md:h-64 rounded-xl overflow-hidden mt-3 border border-gray-400">
                     <Image
                       src={`data:image/jpeg;base64,${msg.image}`}
                       alt="Generated"
                       layout="fill"
                       objectFit="cover"
-                      className="rounded-lg"
+                      className="rounded-xl"
                     />
                     {msg.role === "bot" && (
                       <button
@@ -432,15 +465,16 @@ export default function ChatBox({ theme }: ChatBoxProps) {
         {loading && (
           <div className="flex justify-start items-start gap-3">
             <div
-              className={`flex items-center max-w-[80%] md:max-w-[70%] rounded-xl p-4 shadow-md ${getMessageColors("bot")}`}
+              className={`flex items-center max-w-[80%] md:max-w-[70%] rounded-2xl p-4 shadow-md ${getMessageColors("bot")}`}
             >
               <span className="mr-3 text-xl flex-shrink-0">
                 <FaRobot />
               </span>
-              <div className="animate-pulse flex space-x-2">
-                <div className="h-3 w-3 bg-gray-400 rounded-full"></div>
-                <div className="h-3 w-3 bg-gray-400 rounded-full"></div>
-                <div className="h-3 w-3 bg-gray-400 rounded-full"></div>
+              {/* Modern Typing Indicator */}
+              <div className="flex space-x-1">
+                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></span>
+                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
               </div>
             </div>
           </div>
@@ -448,15 +482,15 @@ export default function ChatBox({ theme }: ChatBoxProps) {
       </div>
 
       {/* Input Area */}
-      <div className={`p-4 border-t ${borderColor} ${theme === "dark" ? "bg-gray-900" : "bg-gray-50"} flex flex-col items-center`}>
+      <div className={`p-4 border-t ${borderColor} ${theme === "dark" ? "bg-gray-950" : "bg-gray-50"} flex flex-col items-center`}>
         {imagePreviewUrl && (
-          <div className="relative w-32 h-32 mb-4 rounded-lg overflow-hidden border border-gray-400">
+          <div className="relative w-32 h-32 mb-4 rounded-xl overflow-hidden border border-gray-400">
             <Image
               src={imagePreviewUrl}
               alt="Image Preview"
               layout="fill"
               objectFit="cover"
-              className="rounded-lg"
+              className="rounded-xl"
             />
             <button
               onClick={clearImagePreview}
@@ -469,13 +503,12 @@ export default function ChatBox({ theme }: ChatBoxProps) {
         )}
 
         {mode !== "chat" && mode !== "image" && (
-          // Adjusted class to ensure it's left-aligned and still uses flex for its internal content
           <div className={`mb-3 py-1 px-3 rounded-full text-sm font-semibold flex items-center gap-2 ${activeModeBgColor} self-start`}>
             {getIcon(mode)} {mode.toUpperCase()} Mode Active
           </div>
         )}
 
-        <form onSubmit={sendMessage} className="flex flex-col gap-3 w-full md:max-w-5xl"> {/* Increased max-width to 5xl */}
+        <form onSubmit={sendMessage} className="flex flex-col gap-3 w-full md:max-w-5xl">
           {/* Textarea and Send Button */}
           <div className="flex items-end gap-3 w-full">
             <textarea
@@ -490,7 +523,7 @@ export default function ChatBox({ theme }: ChatBoxProps) {
               }}
               rows={1}
               placeholder={`Send message in ${mode.toUpperCase()} mode...`}
-              className={`flex-grow resize-none rounded-full py-3 px-5 ${inputBgColor} ${inputTextColor} ${placeholderColor} text-sm md:text-base focus:outline-none border ${borderColor} focus:ring-2 ${
+              className={`flex-grow resize-none rounded-xl py-3 px-5 ${inputBgColor} ${inputTextColor} ${placeholderColor} text-sm md:text-base focus:outline-none border ${borderColor} focus:ring-2 ${
                 theme === "dark" ? "focus:ring-blue-500" : "focus:ring-blue-400"
               } transition-all duration-200`}
               style={{ maxHeight: "200px", overflowY: "auto" }}
@@ -500,19 +533,19 @@ export default function ChatBox({ theme }: ChatBoxProps) {
             <button
               type="submit"
               disabled={loading || (!input.trim() && !imageBase64)}
-              className={`${buttonBgColor} ${buttonTextColor} p-3 rounded-full text-xl shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0`}
+              className={`${buttonBgColor} ${buttonTextColor} p-3 rounded-xl text-xl shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0`}
               title="Send Message"
             >
               <FaPaperPlane />
             </button>
           </div>
 
-          {/* Bottom row of buttons (Tools, Image Upload, Microphone) */}
+          {/* Bottom row buttons (Tools, Image Upload, Microphone) */}
           <div className="flex items-center justify-start gap-3 w-full">
-            {/* File Upload Button */}
+            {/* Image Upload Button */}
             <label
               htmlFor="imageUpload"
-              className={`${toolButtonBgColor} ${toolButtonTextColor} p-3 rounded-full cursor-pointer transition-all duration-200 text-xl flex-shrink-0`}
+              className={`${toolButtonBgColor} ${toolButtonTextColor} p-3 rounded-xl cursor-pointer transition-all duration-200 text-xl flex-shrink-0`}
               title="Upload Image"
             >
               <FaImage />
@@ -530,7 +563,7 @@ export default function ChatBox({ theme }: ChatBoxProps) {
               <button
                 type="button"
                 onClick={() => setShowTools(!showTools)}
-                className={`${toolButtonBgColor} ${toolButtonTextColor} px-4 py-3 rounded-full flex items-center gap-2 transition-all duration-200 text-sm md:text-base`}
+                className={`${toolButtonBgColor} ${toolButtonTextColor} px-4 py-3 rounded-xl flex items-center gap-2 transition-all duration-200 text-sm md:text-base`}
                 title="Select Tool"
               >
                 Tools <FaChevronDown className="text-xs ml-1" />
@@ -570,9 +603,9 @@ export default function ChatBox({ theme }: ChatBoxProps) {
             {/* Microphone Button */}
             <button
               type="button"
-              title={isRecording ? "Stop Recording" : "Start Voice"}
+              title={isRecording ? "Stop Recording" : "Start Voice Input"}
               onClick={isRecording ? stopRecording : startRecording}
-              className={`p-3 rounded-full transition-all duration-200 text-xl flex-shrink-0 ${
+              className={`p-3 rounded-xl transition-all duration-200 text-xl flex-shrink-0 ${
                 isRecording ? "bg-red-600 text-white hover:bg-red-700" : `${toolButtonBgColor} ${toolButtonTextColor}`
               }`}
             >
