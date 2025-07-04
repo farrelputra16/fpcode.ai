@@ -4,7 +4,7 @@ import Groq from "groq-sdk";
 import { GoogleGenAI, Modality } from "@google/genai";
 
 const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY ?? "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",
+  apiKey: process.env.GROQ_API_KEY ?? "",
 });
 
 export async function POST(req: Request) {
