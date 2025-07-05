@@ -858,7 +858,7 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
       <div className="w-full max-w-md bg-white rounded-xl shadow-lg overflow-hidden my-4">
         <div className="bg-blue-600 px-6 py-4 text-white">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold">Fpcode.ai Voice Assistant</h1>
+            <h1 className="text-xl font-bold">FPCODE Voice Assistant</h1>
             {isConnected && (
               <div className="flex items-center">
                 <Activity className="w-3 h-3 text-green-400 mr-2 animate-pulse" />

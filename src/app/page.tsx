@@ -3,7 +3,7 @@
 
 import ChatBox from "@/components/ChatBox";
 import { useState, useEffect } from "react";
-import { FaSun, FaMoon, FaWallet, FaChevronDown, FaCrown, FaMicrophone } from "react-icons/fa"; // FaLock dihapus
+import { FaSun, FaMoon, FaWallet, FaChevronDown, FaCrown, FaMicrophone } from "react-icons/fa";
 import Image from "next/image";
 import { Orbitron } from "next/font/google";
 
@@ -16,33 +16,17 @@ import PremiumModal from "@/components/PremiumModal";
 import FuturisticBackground from "@/components/FuturisticBackground";
 import VoiceChatModule from "@/components/VoiceChatModule";
 
-// IMPOR TERKAIT TOKEN GATING DIHAPUS
-// import { PublicKey } from '@solana/web3.js';
-// import { getAssociatedTokenAddressSync } from '@solana/spl-token';
-// import { useConnection } from "@solana/wallet-adapter-react";
-
 
 const orbitron = Orbitron({ subsets: ["latin"], weight: ["500", "700"] });
-
-// KONFIGURASI TOKEN GATING DIHAPUS
-// const REQUIRED_TOKEN_MINT_ADDRESS = new PublicKey("GANTI_DENGAN_MINT_ADDRESS_TOKEN_ANDA_DI_MAINNET");
-// const REQUIRED_TOKEN_AMOUNT = 1;
-
 
 export default function Home() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [showWalletDropdown, setShowWalletDropdown] = useState(false);
   const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  // STATE TERKAIT TOKEN GATING DIHAPUS
-  // const [hasTokenAccess, setHasTokenAccess] = useState(false);
-  // const [checkingToken, setCheckingToken] = useState(false);
   
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [voiceAudioLevel, setVoiceAudioLevel] = useState(0);
-
-  // useConnection DIHAPUS karena tidak lagi digunakan untuk token gating di sini
-  // const { connection } = useConnection();
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -63,10 +47,6 @@ export default function Home() {
 
   const activeUserAddress = isSolanaConnected && solanaPublicKey ? solanaPublicKey.toBase58() : undefined;
   const activeChain = isSolanaConnected ? `Solana (${solanaNetwork})` : 'None';
-
-  // useEffect TOKEN GATING DIHAPUS
-  // useEffect(() => { /* ... */ }, [isSolanaConnected, solanaPublicKey, connection]);
-
 
   const toggleTheme = () => {
     setTheme((prevTheme) => (prevTheme === "dark" ? "light" : "dark"));
@@ -94,13 +74,11 @@ export default function Home() {
     ? accentColor
     : walletButtonBaseColor;
 
-  // Lógica akses disederhanakan karena token gating dihapus.
-  // Sekarang hanya perlu terhubung ke dompet untuk akses.
-  const showChatAppContent = isSolanaConnected;
-  const showConnectMessage = !isSolanaConnected;
-  // Pesan loading dan denied dihapus karena tidak ada token gating
-  // const showCheckingMessage = isSolanaConnected && checkingToken;
-  // const showAccessDeniedMessage = isSolanaConnected && !checkingToken && !hasTokenAccess;
+  // Lógica untuk menampilkan konten aplikasi:
+  // Voice mode selalu aktif jika isVoiceMode true
+  // Text mode hanya aktif jika isSolanaConnected
+  const showChatBox = !isVoiceMode && isSolanaConnected;
+  const showConnectWalletMessage = !isVoiceMode && !isSolanaConnected;
 
 
   // Tombol Voice Mode
@@ -119,16 +97,14 @@ export default function Home() {
           <span className={`tracking-wide ${fpcodeAiTextColor} ${orbitron.className}`}>fpcode.ai</span>
         </div>
         <div className="flex items-center gap-4">
-          {/* Tombol Voice Mode */}
-          {showChatAppContent && ( // Hanya tampilkan jika pengguna punya akses
-            <button
-              onClick={() => setIsVoiceMode(!isVoiceMode)}
-              className={`${voiceModeButtonClass}`}
-              title={isVoiceMode ? "Switch to Text Mode" : "Switch to Voice Mode"}
-            >
-              <FaMicrophone className="text-xl" />
-            </button>
-          )}
+          {/* Tombol Voice Mode - Selalu Tampilkan */}
+          <button
+            onClick={() => setIsVoiceMode(!isVoiceMode)}
+            className={`${voiceModeButtonClass}`}
+            title={isVoiceMode ? "Switch to Text Mode" : "Switch to Voice Mode"}
+          >
+            <FaMicrophone className="text-xl" />
+          </button>
 
           {/* Responsive Premium Button */}
           <button
@@ -187,26 +163,21 @@ export default function Home() {
       <main className="relative z-10 flex-grow flex justify-center items-stretch py-4 md:py-8 px-4 sm:px-6 lg:px-8 bg-transparent">
         <div className="w-full max-w-5xl h-[calc(100vh-160px)] flex flex-col">
           <section className="flex-grow flex flex-col min-h-0">
-            {showChatAppContent ? ( // Hanya tampilkan konten aplikasi jika dompet terhubung
-              isVoiceMode ? (
-                <VoiceChatModule
-                  theme={theme}
-                  onRecordingChange={(recording) => console.log('Recording state:', recording)}
-                  onStatusChange={(statusMsg) => console.log('Voice status:', statusMsg)}
-                  onAudioLevelChange={setVoiceAudioLevel}
-                />
-              ) : (
+            {isVoiceMode ? (
+              <VoiceChatModule
+                theme={theme}
+                onRecordingChange={(recording) => console.log('Recording state:', recording)}
+                onStatusChange={(statusMsg) => console.log('Voice status:', statusMsg)}
+                onAudioLevelChange={setVoiceAudioLevel}
+              />
+            ) : showChatBox ? ( // Tampilkan ChatBox jika bukan voice mode DAN wallet terhubung
                 <ChatBox theme={theme} userAddress={activeUserAddress} activeChain={activeChain} isBackgroundTransparent={true} />
-              )
-            ) : ( // Pesan untuk menghubungkan dompet
-              <div className={`flex flex-col items-center justify-center h-full rounded-xl shadow-xl border ${borderColor} ${theme === 'dark' ? 'bg-gray-900/85' : 'bg-white/85'} ${textColor}`}>
-                <FaWallet className="text-6xl mb-4 text-blue-500" /> {/* FIX: Use FaWallet here */}
-                {showConnectMessage && (
-                  <p className="text-lg text-center">Please connect your wallet to access the app.</p>
-                )}
-                {/* Pesan token gating lainnya dihapus */}
-              </div>
-            )}
+            ) : showConnectWalletMessage ? ( // Tampilkan pesan connect wallet jika bukan voice mode DAN wallet TIDAK terhubung
+                <div className={`flex flex-col items-center justify-center h-full rounded-xl shadow-xl border ${borderColor} ${theme === 'dark' ? 'bg-gray-900/85' : 'bg-white/85'} ${textColor}`}>
+                  <FaWallet className="text-6xl mb-4 text-blue-500" />
+                  <p className="text-lg text-center">Please connect your wallet to access the text chat.</p>
+                </div>
+            ) : null}
           </section>
         </div>
       </main>
