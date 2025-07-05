@@ -2,15 +2,14 @@
 'use client';
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Mic, MicOff, Square, CheckCircle2, XCircle, AlertCircle, Activity } from 'lucide-react';
+import { Mic, MicOff, Square, Activity, Redo } from 'lucide-react';
 import { Base64 } from 'js-base64';
-import { convertBase64ToFloat32 } from '../lib/utils'; // Ensure this utility is correct and available
-import { VOICE_OPTIONS } from '../lib/constant'; // Adjust path if necessary
+import { convertBase64ToFloat32 } from '../lib/utils';
+import { VOICE_OPTIONS } from '../lib/constant';
+import { Orbitron } from 'next/font/google';
+import AudioVisualizer3D from './AudioVisualizer3D';
 
-// Removed: `declare type PermissionName` to avoid conflict warnings.
-// Relying on global types or explicit casts like `as PermissionDescriptor`.
-
-const orbitron = { className: "font-orbitron" };
+const orbitron = Orbitron({ subsets: ["latin"], weight: ["500", "700"] });
 
 interface VoiceChatModuleProps {
   theme: "light" | "dark";
@@ -59,7 +58,7 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
 
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [audioLevel, setAudioLevel] = useState<number>(0);
-  const [isPlayingAI, setIsPlayingAI] = useState<boolean>(false); // AI speaking status (for visualizer & UI)
+  const [isPlayingAI, setIsPlayingAI] = useState<boolean>(false);
   const [queueLength, setQueueLength] = useState<number>(0);
 
   // Permission states
@@ -75,7 +74,7 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
 
 
   // --- Refs (using a SINGLE AudioContextRef) ---
-  const audioContextRef = useRef<AudioContext | null>(null); // SINGLE AudioContext for both input/output
+  const audioContextRef = useRef<AudioContext | null>(null);
   const analyserNodeRef = useRef<AnalyserNode | null>(null);
   const mediaStreamSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const audioWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
@@ -164,26 +163,8 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
     }
   }, []);
 
-  // Request microphone permission directly
-  const requestMicrophonePermission = useCallback(async () => {
-    setPermissionError(null);
-    try {
-      const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      setMicPermissionState("granted");
-      localStream.getTracks().forEach((track) => track.stop());
-      checkMicrophonePermission(); // Re-check to update UI
-    } catch (error) {
-      console.error("Failed to get microphone permission:", error);
-      setMicPermissionState("denied");
-      setPermissionError(
-        "Microphone access is required. Please allow microphone access and try again."
-      );
-    }
-  }, [checkMicrophonePermission]);
-
   // Main scheduling function for continuous playback (AI audio)
   const scheduleAudioPlayback = useCallback(async () => {
-    // Using the single audioContextRef for AI output
     if (!audioContextRef.current || audioBufferRef.current.length === 0) {
       console.log("No audio context or empty buffer - skipping scheduling");
       isPlayingAIRef.current = false;
@@ -191,7 +172,6 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
       return;
     }
 
-    // Proactive resume check for the single AudioContext
     if (audioContextRef.current.state === 'suspended') {
       console.log("Resuming AudioContext for AI playback...");
       try {
@@ -200,7 +180,7 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
       } catch (error) {
         console.error("Failed to resume AudioContext for AI playback:", error);
         updateError("Failed to resume AI audio playback. Please interact with the page.");
-        audioBufferRef.current = []; // Clear queue on critical failure
+        audioBufferRef.current = [];
         isPlayingAIRef.current = false;
         setIsPlayingAI(false);
         scheduledEndTimeRef.current = 0;
@@ -262,6 +242,13 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
               console.log("No more audio in queue, playback complete");
               isPlayingAIRef.current = false;
               setIsPlayingAI(false);
+              setAiSubtitle(''); // Clear AI subtitle when AI finishes speaking
+              // If not recording, return to idle
+              if (!isRecording) {
+                  updateStatus('Idle.');
+              } else if (!isMicMuted) {
+                  updateStatus('Listening...');
+              }
               scheduledEndTimeRef.current = 0;
             }
           };
@@ -272,6 +259,7 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
       console.error("Error in AI audio scheduling:", error);
       isPlayingAIRef.current = false;
       setIsPlayingAI(false);
+      setAiSubtitle('');
       if (audioBufferRef.current.length > 0) {
         audioBufferRef.current.splice(0, 1);
         setQueueLength(audioBufferRef.current.length);
@@ -281,12 +269,11 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
       }
       updateError("An error occurred during AI audio playback.");
     }
-  }, [setIsPlayingAI, setQueueLength, updateError]);
+  }, [setIsPlayingAI, setQueueLength, updateError, updateStatus, isRecording, isMicMuted, setAiSubtitle]);
 
 
   // Process incoming audio chunks (from AI)
   const processAudioChunk = useCallback((base64Data: string) => {
-    // Now using the single audioContextRef
     if (!audioContextRef.current) {
         console.warn("AudioContext not ready for processing incoming AI audio chunk.");
         return;
@@ -297,7 +284,7 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
       audioBufferRef.current.push(float32Data);
       const newLength = audioBufferRef.current.length;
       setQueueLength(newLength);
-      console.log(`Added AI audio chunk. Queue length: ${newLength}`);
+      // console.log(`Added AI audio chunk. Queue length: ${newLength}`);
 
       if (!isPlayingAIRef.current) {
         scheduleAudioPlayback();
@@ -315,7 +302,8 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
   const sendMediaChunks = useCallback(
     (base64Data: string, mimeType: string) => {
       // STOP SENDING MIC AUDIO IF AI IS SPEAKING OR MIC IS MUTED/CONVERSATION INACTIVE
-      if (isMicMuted || !isConversationActive || isPlayingAI) { // ADDED isPlayingAI check here
+      // Added isPlayingAI to dependencies
+      if (isMicMuted || !isConversationActive || isPlayingAI) {
         return;
       }
 
@@ -336,7 +324,7 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
         console.warn("WebSocket not connected, cannot send audio data");
       }
     },
-    [isMicMuted, isConversationActive, isPlayingAI] // ADDED isPlayingAI to dependencies
+    [isMicMuted, isConversationActive, isPlayingAI] // isPlayingAI is now a dependency
   );
 
 
@@ -374,7 +362,7 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
         }
         if (messageData.serverContent.inputTranscription?.text) {
           setUserTranscript(messageData.serverContent.inputTranscription.text);
-          if (!isPlayingAI) { // isPlayingAI is now a dependency
+          if (!isPlayingAI) {
               updateStatus('Processing...');
           }
         }
@@ -409,13 +397,13 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
           audioBufferRef.current = [];
           isPlayingAIRef.current = false;
           setIsPlayingAI(false);
-          onAudioLevelChange?.(0); // Safely call if exists
+          onAudioLevelChange?.(0);
           setAiSubtitle('');
           updateStatus('AI Interrupted. Listening again...');
         }
       }
     }
-  }, [processAudioChunk, updateStatus, setAiSubtitle, setIsPlayingAI, isMicMuted, isPlayingAI, onAudioLevelChange]);
+  }, [processAudioChunk, updateStatus, setAiSubtitle, setIsPlayingAI, isMicMuted, onAudioLevelChange]);
 
 
   // Initialize WebSocket connection
@@ -507,12 +495,17 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
       mediaStreamSourceRef.current.disconnect();
       mediaStreamSourceRef.current = null;
     }
+    if (analyserNodeRef.current) {
+      analyserNodeRef.current.disconnect();
+      analyserNodeRef.current = null;
+    }
+
 
     // Close the SINGLE audio context
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
       try {
         audioContextRef.current.close().catch((e) => console.error("Error closing AudioContext:", e));
-        audioContextRef.current = null; // Set to null after closing
+        audioContextRef.current = null;
       } catch (error) {
         console.error("Error closing AudioContext:", error);
       }
@@ -569,6 +562,8 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
     updateStatus("Starting conversation...");
     setPermissionError(null);
     setCurrentError(null);
+    setUserTranscript('');
+    setAiSubtitle('');
 
     try {
       // 1. Periksa dan minta izin mikrofon
@@ -596,9 +591,9 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
         audio: {
           sampleRate: 16000,
           channelCount: 1,
-          echoCancellation: true, // Set to true like successful Vite example
-          autoGainControl: true,  // Set to true like successful Vite example
-          noiseSuppression: true, // Set to true like successful Vite example
+          echoCancellation: true,
+          autoGainControl: true,
+          noiseSuppression: true,
         },
       });
       setMediaStream(audioStream);
@@ -607,7 +602,9 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
       if (audioContextRef.current && audioContextRef.current.state !== "closed") {
         await audioContextRef.current.close().catch((e) => console.error("Error closing old AudioContext:", e));
       }
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ // eslint-disable-line @typescript-eslint/no-explicit-any
+      // Specific type for AudioContext constructor to avoid 'any'
+      const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext: new (contextOptions?: AudioContextOptions) => AudioContext; }).webkitAudioContext;
+      audioContextRef.current = new AudioContextCtor({
         sampleRate: 24000, // Context sample rate for AI output. Mic input will be resampled by AudioWorklet.
       });
       console.log("AudioContext actual Sample Rate (for input/output):", audioContextRef.current.sampleRate);
@@ -642,18 +639,19 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
       updateError(`Failed to start conversation: ${errorMessageText}. Please check microphone & try again.`);
       stopConversation();
     }
-  }, [micPermissionState, initializeWebSocket, updateStatus, updateError, onRecordingChange, stopConversation]);
+  }, [micPermissionState, initializeWebSocket, updateStatus, updateError, onRecordingChange, stopConversation, setUserTranscript, setAiSubtitle]);
 
 
   // Re-check permissions before starting conversation
   const ensurePermissionsAndStart = useCallback(async () => {
-    await checkMicrophonePermission();
-    if (micPermissionState === "granted") {
-      startConversation();
-    } else {
-      requestMicrophonePermission();
+    // If permission is denied, the button will be disabled, handled by UI.
+    // If it's prompt or unknown, we request it.
+    if (micPermissionState === "denied") {
+        setPermissionError("Microphone access is required. Please allow microphone access in your browser settings.");
+    } else { // granted, prompt, or unknown
+        await startConversation(); // Attempt to start conversation
     }
-  }, [checkMicrophonePermission, micPermissionState, requestMicrophonePermission, startConversation]);
+  }, [micPermissionState, startConversation]);
 
 
   // Toggle microphone mute/unmute
@@ -673,16 +671,22 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
     if (newMuteState) {
         setAudioLevel(0);
         updateStatus('Mic Muted. Click Unmute to speak.');
+        setIsRecording(false); // Stop recording when muted
+        onRecordingChange(false);
     } else {
         updateStatus('Listening...');
+        setIsRecording(true); // Resume recording when unmuted
+        onRecordingChange(true);
     }
-  }, [isConversationActive, isMicMuted, mediaStream, setAudioLevel, updateStatus]);
+  }, [isConversationActive, isMicMuted, mediaStream, setAudioLevel, updateStatus, onRecordingChange]);
 
 
   // Initial setup for the SINGLE AudioContext (runs once on mount)
   useEffect(() => {
     if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ // eslint-disable-line @typescript-eslint/no-explicit-any
+      // Specific type for AudioContext constructor to avoid 'any'
+      const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext: new (contextOptions?: AudioContextOptions) => AudioContext; }).webkitAudioContext;
+      audioContextRef.current = new AudioContextCtor({
         sampleRate: 24000,
       });
       console.log("Initial AudioContext (for output) initialized with sample rate:", audioContextRef.current.sampleRate);
@@ -707,8 +711,9 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
       document.removeEventListener('keydown', ensureAudioContextRunning, { capture: true });
       if (audioContextRef.current && audioContextRef.current.state !== "closed") {
         audioContextRef.current.close().catch((error) => {
-          console.error("Error closing AudioContext:", error);
+          console.error("Error closing AudioContext on unmount:", error);
         });
+        audioContextRef.current = null;
       }
     };
   }, []);
@@ -762,17 +767,24 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
         mediaStreamSourceRef.current = ctx.createMediaStreamSource(mediaStream);
         mediaStreamSourceRef.current.connect(audioWorkletNodeRef.current);
 
+        // Connect analyser to the audioWorkletNode for microphone input visualization
         audioWorkletNodeRef.current.connect(analyserNodeRef.current);
         // REMOVED: audioWorkletNodeRef.current.connect(ctx.destination); // Disconnect local mic monitoring to prevent loopback
 
         audioWorkletNodeRef.current.port.onmessage = (event) => {
-          if (!isConversationActive) return;
+          if (!isConversationActive) return; // Stop processing if conversation is no longer active
 
           if (event.data.pcmData) {
             const pcmBuffer = event.data.pcmData as ArrayBuffer;
             const level = event.data.level as number;
 
-            setAudioLevel(level);
+            // Only update audio level for visualization if mic is not muted
+            if (!isMicMuted) {
+              setAudioLevel(level);
+            } else {
+              setAudioLevel(0); // If muted, level should be 0
+            }
+
 
             const pcmUint8 = new Uint8Array(pcmBuffer);
             const base64Data = Base64.fromUint8Array(pcmUint8);
@@ -807,13 +819,15 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
       }
     };
 
-    if (mediaStream && isConversationActive) {
+    if (mediaStream && isConversationActive && !isMicMuted) { // Add isMicMuted to condition
       setupAudioProcessing();
     } else {
+      // Ensure cleanup happens if conditions are not met
       if (cleanup) {
         cleanup();
         cleanup = undefined;
       }
+      setAudioLevel(0); // Reset audio level if not actively processing mic input
     }
 
     return () => {
@@ -821,17 +835,18 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
             cleanup();
         }
     };
-  }, [mediaStream, isConversationActive, sendMediaChunks, updateError, setAudioLevel]);
+  }, [mediaStream, isConversationActive, isMicMuted, sendMediaChunks, updateError, setAudioLevel]);
 
 
-  // Effect for AI speaking animation (simplified: just sets level when AI is playing)
+  // Effect for AI speaking animation (sets level for visualizer)
   useEffect(() => {
+    // If AI is speaking, set a constant level for visualization (as we don't get AI audio level directly)
     if (isPlayingAI) {
-      onAudioLevelChange?.(0.5);
-    } else {
+      onAudioLevelChange?.(0.5); // A fixed visual level for AI speaking
+    } else if (!isRecording) { // Only set to 0 if not recording and AI is not speaking
       onAudioLevelChange?.(0);
     }
-  }, [isPlayingAI, onAudioLevelChange]);
+  }, [isPlayingAI, isRecording, onAudioLevelChange]);
 
 
   // Effect for periodically checking microphone permissions when not active
@@ -851,174 +866,129 @@ export default function VoiceChatModule({ theme, onRecordingChange, onStatusChan
     };
   }, [isConversationActive, micPermissionState, checkMicrophonePermission]);
 
+  // --- Styling for Buttons ---
+  const buttonBaseClass = "outline-none border border-gray-700 text-white rounded-full bg-gray-800 w-16 h-16 cursor-pointer text-2xl flex items-center justify-center transition-all duration-200";
+  const buttonHoverClass = "hover:bg-gray-700";
+  // 'recordButtonActiveClassName' is now used
+  const recordButtonActiveClassName = isRecording && !isMicMuted ? "bg-red-600 animate-pulse-fast border-red-500" : "";
+
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen w-full relative p-4">
-      {/* Header */}
-      <div className="w-full max-w-md bg-white rounded-xl shadow-lg overflow-hidden my-4">
-        <div className="bg-blue-600 px-6 py-4 text-white">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold">FPCODE Voice Assistant</h1>
-            {isConnected && (
-              <div className="flex items-center">
-                <Activity className="w-3 h-3 text-green-400 mr-2 animate-pulse" />
-                <span className="text-sm">Connected</span>
-              </div>
-            )}
-          </div>
+    <div className="flex flex-col items-center justify-center h-screen w-full relative">
+      {/* Container for Voice Selection, Status, and Queue - centered at the top */}
+      <div className="absolute top-5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-30 w-full max-w-md px-4">
+        {/* Voice Selection dropdown */}
+        <div className="text-center w-full">
+          <label htmlFor="voice" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Assistant Voice:
+          </label>
+          <select
+            id="voice"
+            value={selectedVoice}
+            onChange={(e) => setSelectedVoice(e.target.value)}
+            disabled={isConversationActive}
+            className={`block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+              isConversationActive ? "bg-gray-100 dark:bg-gray-700" : "bg-white dark:bg-gray-800"
+            } text-gray-900 dark:text-gray-100`}
+          >
+            {VOICE_OPTIONS.map((voice) => (
+              <option key={voice.value} value={voice.value}>
+                {voice.label}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Main content */}
-        <div className="p-6 space-y-6">
-          {currentError && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              <div className="flex items-start">
-                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-red-500" />
-                <div className="flex-1">{currentError}</div>
+        {/* Status and Queue */}
+        <div className="text-center text-sm text-gray-400 mt-2">
+          <p className={`${orbitron.className}`}>Status: {status}</p>
+          {currentError && <p className="text-red-500 font-bold">{currentError}</p>}
+          {permissionError && <p className="text-red-500 font-bold">{permissionError}</p>}
+          <p>AI Queue: {queueLength}</p>
+          {isConnected && (
+              <div className="flex items-center justify-center text-green-400 mt-1">
+                <Activity className="w-3 h-3 mr-1 animate-pulse" />
+                <span className="text-xs">Connected</span>
               </div>
-            </div>
           )}
-          {permissionError && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              <div className="flex items-start">
-                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-red-500" />
-                <div className="flex-1">{permissionError}</div>
-              </div>
-            </div>
-          )}
-
-          <div className="text-sm text-gray-600 flex items-center">
-            <span className="mr-2">Microphone:</span>
-            {micPermissionState === "granted" && (
-              <span className="text-green-600 flex items-center">
-                <CheckCircle2 className="h-4 w-4 mr-1" />
-                Access granted
-              </span>
-            )}
-            {micPermissionState === "denied" && (
-              <span className="text-red-600 flex items-center">
-                <XCircle className="h-4 w-4 mr-1" />
-                Access denied
-              </span>
+           {/* Microphone permission status (for better user feedback) */}
+           {micPermissionState === "denied" && (
+              <p className="text-red-500 text-xs mt-1">Microphone access denied.</p>
             )}
             {(micPermissionState === "prompt" || micPermissionState === "unknown") && (
-              <span className="text-yellow-600 flex items-center">
-                <AlertCircle className="h-4 w-4 mr-1" />
-                {micPermissionState === "prompt" ? "Permission needed" : "Status unknown"}
-              </span>
+              <p className="text-yellow-500 text-xs mt-1">Microphone permission needed.</p>
             )}
-          </div>
-
-          <div className="space-y-2">
-            <label
-              htmlFor="voice"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Assistant Voice
-            </label>
-            <select
-              id="voice"
-              value={selectedVoice}
-              onChange={(e) => setSelectedVoice(e.target.value)}
-              disabled={isConversationActive}
-              className={`block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
-                isConversationActive ? "bg-gray-100" : ""
-              }`}
-            >
-              {VOICE_OPTIONS.map((voice) => (
-                <option key={voice.value} value={voice.value}>
-                  {voice.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between text-xs text-gray-600">
-              <span>Audio Level</span>
-              <span>{isPlayingAI ? "AI Speaking" : (isRecording ? "Listening" : "Idle")}</span>
-            </div>
-            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className={`h-full transition-all duration-300 ${
-                  isPlayingAI
-                    ? "bg-blue-500"
-                    : isMicMuted
-                    ? "bg-gray-400"
-                    : "bg-green-500"
-                }`}
-                style={{ width: `${Math.min(audioLevel * 2, 100)}%` }}
-              ></div>
-            </div>
-          </div>
-
-          <div className="flex justify-between text-sm text-gray-600">
-            <div>Status: {status}</div>
-            <div>Queue: {queueLength} items</div>
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            {!isConversationActive ? (
-              <button
-                onClick={ensurePermissionsAndStart}
-                className="flex-1 bg-blue-600 text-white rounded-lg py-3 font-medium hover:bg-blue-700 transition-colors flex items-center justify-center"
-                disabled={micPermissionState === "denied"}
-              >
-                <Mic className="w-5 h-5 mr-2" />
-                Start Conversation
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={toggleMicMute}
-                  className={`flex-1 ${
-                    isMicMuted
-                      ? "bg-yellow-500 hover:bg-yellow-600"
-                      : "bg-gray-600 hover:bg-gray-700"
-                  } text-white rounded-lg py-3 font-medium transition-colors flex items-center justify-center`}
-                >
-                  {isMicMuted ? (
-                    <>
-                      <MicOff className="w-5 h-5 mr-2" />
-                      Unmute
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="w-5 h-5 mr-2" />
-                      Mute
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={stopConversation}
-                  className="flex-1 bg-red-600 text-white rounded-lg py-3 font-medium hover:bg-red-700 transition-colors flex items-center justify-center"
-                >
-                  <Square className="w-5 h-5 mr-2" />
-                  Stop
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="px-6 py-3 bg-gray-50 text-xs text-gray-500 text-center">
-          Using voice: {selectedVoice} • Powered by fpcode.ai
         </div>
       </div>
-       {/* Subtitle Pengguna */}
-       {userTranscript && (
-        <div className={`fixed bottom-20 md:bottom-24 max-w-full px-4 py-2 rounded-lg text-center ${theme === 'dark' ? 'bg-gray-800/70 text-white' : 'bg-white/70 text-gray-900'} ${orbitron.className} text-lg md:text-xl z-20 shadow-lg`}>
+
+      {/* User Subtitle */}
+      {userTranscript && (
+        <div className={`absolute top-40 md:top-48 max-w-full px-4 py-2 rounded-lg text-center ${theme === 'dark' ? 'bg-gray-800/70 text-white' : 'bg-white/70 text-gray-900'} ${orbitron.className} text-lg md:text-xl z-20 shadow-lg`}>
           {userTranscript}
         </div>
       )}
 
-      {/* Subtitle AI */}
-      {aiSubtitle && !isRecording && (
-        <div className={`fixed bottom-10 md:bottom-12 max-w-full px-4 py-2 rounded-lg text-center ${theme === 'dark' ? 'bg-blue-800/70 text-white' : 'bg-blue-200/70 text-blue-900'} ${orbitron.className} text-lg md:text-xl z-20 shadow-lg`}>
+      {/* AI Subtitle */}
+      {aiSubtitle && isPlayingAI && (
+        <div className={`absolute bottom-64 md:bottom-72 max-w-full px-4 py-2 rounded-lg text-center ${theme === 'dark' ? 'bg-blue-800/70 text-white' : 'bg-blue-200/70 text-blue-900'} ${orbitron.className} text-lg md:text-xl z-20 shadow-lg`}>
           {aiSubtitle}
         </div>
       )}
+
+      {/* 3D Audio Visualizer and AI Speaking Icon */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <AudioVisualizer3D
+          theme={theme}
+          // Limit audioLevel for visualization to be less "lebay"
+          audioLevel={isPlayingAI ? 0.4 : (isRecording && !isMicMuted ? Math.min(audioLevel * 0.7, 0.4) : 0)}
+        />
+        {isPlayingAI && <Activity className="absolute text-5xl text-blue-400 animate-pulse" />}
+      </div>
+
+      {/* Control Buttons at the Bottom */}
+      <div className="absolute bottom-10 left-0 right-0 flex items-center justify-center gap-4">
+        {/* Reset Button */}
+        <button
+          onClick={stopConversation}
+          className={`${buttonBaseClass} ${buttonHoverClass}`}
+          title="Reset Session / Stop All"
+          disabled={!isConversationActive && !isConnected}
+        >
+          <Redo />
+        </button>
+
+        {/* Main Mic Button */}
+        {!isConversationActive ? (
+          <button
+            onClick={ensurePermissionsAndStart}
+            className={`${buttonBaseClass} bg-blue-600 hover:bg-blue-700 w-20 h-20 text-3xl ${micPermissionState === "denied" ? 'opacity-50 cursor-not-allowed' : ''}`}
+            title="Start Conversation"
+            disabled={micPermissionState === "denied"}
+          >
+            <Mic />
+          </button>
+        ) : (
+          <>
+            {/* Mute/Unmute Button */}
+            <button
+              onClick={toggleMicMute}
+              className={`${buttonBaseClass} ${buttonHoverClass} ${isMicMuted ? 'bg-yellow-500' : recordButtonActiveClassName}`}
+              title={isMicMuted ? "Unmute Microphone" : "Mute Microphone"}
+            >
+              {isMicMuted ? <MicOff /> : <Mic />}
+            </button>
+
+            {/* Stop Conversation Button (always shown when active) */}
+            <button
+                onClick={stopConversation}
+                className={`${buttonBaseClass} ${buttonHoverClass} bg-red-600 animate-pulse`}
+                title="Stop Conversation"
+            >
+                <Square />
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
