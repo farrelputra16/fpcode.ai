@@ -10,6 +10,7 @@ import { Color, Mesh, ShaderMaterial } from 'three';
 import vertexShader from '../components/shaders/vertexShader.glsl';
 import fragmentShader from '../components/shaders/fragmentShader.glsl';
 
+// Definisi Tipe untuk properti material kustom
 type CustomShaderMaterialProps = {
   uTime: number;
   uColor: Color;
@@ -18,9 +19,10 @@ type CustomShaderMaterialProps = {
   uBrightness: number;
   uDarkness: number;
   attach?: string;
-  args?: unknown[]; // Changed from any[] to unknown[]
+  args?: unknown[];
 };
 
+// Buat konstruktor material kustom
 const CustomShaderMaterial = dreiShaderMaterial(
   {
     uTime: 0,
@@ -34,9 +36,11 @@ const CustomShaderMaterial = dreiShaderMaterial(
   fragmentShader
 );
 
+// Perluas agar tersedia sebagai elemen JSX
 extend({ CustomShaderMaterial });
 
-// (declare global block in r3f-custom.d.ts remains the same)
+// Deklarasi Global untuk TypeSript (ada di src/types/r3f-custom.d.ts)
+// Pastikan file ini ada dan terkonfigurasi dengan benar
 
 interface AnimatedTorusProps {
   theme: 'light' | 'dark';
@@ -72,14 +76,13 @@ function AnimatedTorus({ theme, position, rotationSpeed = [0.002, 0.003, 0], dis
   });
 
   return (
-    // Adjust torus args based on sizeMultiplier
     <Torus ref={meshRef} args={[1 * sizeMultiplier, 0.3 * sizeMultiplier, 16, 100]} position={position}>
       <customShaderMaterial ref={materialRef} {...uniforms} />
     </Torus>
   );
 }
 
-// CameraParallaxController remains the same
+// Komponen CameraParallaxController tetap sama
 interface CameraParallaxControllerProps {
   mousePosition: { x: number; y: number };
 }
@@ -100,9 +103,10 @@ function CameraParallaxController({ mousePosition }: CameraParallaxControllerPro
 interface FuturisticBackgroundProps {
   theme: 'light' | 'dark';
   mousePosition: { x: number; y: number };
+  audioLevel?: number; // <-- FIX: Tambahkan prop audioLevel di sini
 }
-
-export default function FuturisticBackground({ theme, mousePosition }: FuturisticBackgroundProps) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export default function FuturisticBackground({ theme, mousePosition, audioLevel = 0 }: FuturisticBackgroundProps) {
   return (
     <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none bg-transparent opacity-30">
       <Canvas
@@ -114,26 +118,28 @@ export default function FuturisticBackground({ theme, mousePosition }: Futuristi
         <pointLight position={[10, 10, 10]} intensity={theme === 'dark' ? 1.5 : 2.0} />
         <pointLight position={[-10, -10, -10]} intensity={theme === 'dark' ? 1.0 : 1.5} />
 
+        {/* Render the camera controller */}
         <CameraParallaxController mousePosition={mousePosition} />
 
-        {/* --- OBJECT PLACEMENT FOR SIDE AREAS --- */}
-        {/* Larger X values push objects further to the sides */}
-        {/* Varying Z values for depth */}
-        {/* Left Side Orbs */}
+        {/* Beberapa Torus tersebar, lebih menonjolkan animasi */}
         <AnimatedTorus theme={theme} position={[-8, 4, -2]} rotationSpeed={[0.003, 0.004, 0.001]} distortionMultiplier={1.0} sizeMultiplier={1.2} />
         <AnimatedTorus theme={theme} position={[-6, -2, 1]} rotationSpeed={[0.004, 0.003, 0.002]} distortionMultiplier={0.8} sizeMultiplier={0.9} />
         <AnimatedTorus theme={theme} position={[-7, 0, -4]} rotationSpeed={[0.002, 0.005, 0.001]} distortionMultiplier={1.5} sizeMultiplier={1.5} />
         <AnimatedTorus theme={theme} position={[-9, -5, 0]} rotationSpeed={[0.007, 0.004, 0.003]} distortionMultiplier={1.2} sizeMultiplier={1.0} />
+        <AnimatedTorus theme={theme} position={[-10, 2, -1]} rotationSpeed={[0.005, 0.003, 0.004]} distortionMultiplier={1.0} sizeMultiplier={1.1} />
+        <AnimatedTorus theme={theme} position={[-5, -7, 2]} rotationSpeed={[0.003, 0.005, 0.002]} distortionMultiplier={0.9} sizeMultiplier={1.2} />
 
-        {/* Right Side Orbs */}
         <AnimatedTorus theme={theme} position={[8, 4, 0]} rotationSpeed={[0.003, 0.004, 0.001]} distortionMultiplier={1.0} sizeMultiplier={1.1} />
         <AnimatedTorus theme={theme} position={[6, -2, -1]} rotationSpeed={[0.004, 0.003, 0.002]} distortionMultiplier={0.9} sizeMultiplier={1.3} />
         <AnimatedTorus theme={theme} position={[7, 0, 2]} rotationSpeed={[0.002, 0.005, 0.001]} distortionMultiplier={1.3} sizeMultiplier={1.4} />
         <AnimatedTorus theme={theme} position={[9, -5, -3]} rotationSpeed={[0.007, 0.004, 0.003]} distortionMultiplier={1.1} sizeMultiplier={0.8} />
+        <AnimatedTorus theme={theme} position={[10, 2, -1]} rotationSpeed={[0.005, 0.003, 0.004]} distortionMultiplier={1.0} sizeMultiplier={1.0} />
+        <AnimatedTorus theme={theme} position={[5, -7, 2]} rotationSpeed={[0.003, 0.005, 0.002]} distortionMultiplier={0.9} sizeMultiplier={1.1} />
 
-        {/* Some orbs slightly behind the chat panel, but still visible if transparent enough */}
         <AnimatedTorus theme={theme} position={[-1.5, 3, -5]} rotationSpeed={[0.005, 0.002, 0.004]} distortionMultiplier={0.7} sizeMultiplier={0.7} />
         <AnimatedTorus theme={theme} position={[1.5, -3, -6]} rotationSpeed={[0.006, 0.003, 0.005]} distortionMultiplier={0.6} sizeMultiplier={0.6} />
+        <AnimatedTorus theme={theme} position={[-2, -1, 3]} rotationSpeed={[0.004, 0.005, 0.003]} distortionMultiplier={0.8} sizeMultiplier={0.8} />
+        <AnimatedTorus theme={theme} position={[2, 1, 4]} rotationSpeed={[0.005, 0.004, 0.002]} distortionMultiplier={0.7} sizeMultiplier={0.7} />
       </Canvas>
     </div>
   );

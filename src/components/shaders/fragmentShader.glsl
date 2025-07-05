@@ -5,6 +5,7 @@ uniform float uDistortionStrength; // Not directly used for color, but can be fo
 uniform float uNoiseScale; // Can influence color variation
 uniform float uBrightness;
 uniform float uDarkness;
+uniform float uAudioLevel; // <-- TAMBAHKAN INI
 varying vec3 vNormal; // Interpolated normal from vertex shader
 varying vec3 vPosition; // Interpolated position from fragment shader for effects
 
@@ -39,7 +40,6 @@ float cnoise(vec3 P) {
     vec3 g2 = normalize(vec3(gx.z,gy.z,gz.z));
     vec3 g3 = normalize(vec3(gx.w,gy.w,gz.w));
 
-    // --- FIX: Change Pf0.xyw to Pf0.xyz ---
     vec4 norm0 = taylorInvSqrt(vec4(dot(g0,Pf0.xyz), dot(g1,Pf1.xyz), dot(g2,Pf0.xyz), dot(g3,Pf1.xyz)));
     g0 *= norm0.x;
     g1 *= norm0.y;
@@ -49,7 +49,6 @@ float cnoise(vec3 P) {
     vec4 m = max(0.6 - vec4(dot(Pf0,Pf0), dot(Pf1,Pf1), dot(Pf0.xyz,Pf0.xyz), dot(Pf1.xyz,Pf1.xyz)), 0.0);
     m = m * m;
     m = m * m;
-    // --- FIX: Change Pf0.xyw to Pf0.xyz here as well ---
     vec4 px = vec4(dot(Pf0, g0), dot(Pf1, g1), dot(Pf0.xyz, g2), dot(Pf1.xyz, g3));
     return 42.0 * dot(m, px);
 }
@@ -62,7 +61,11 @@ void main() {
 
     // Add subtle color noise based on position and time
     float colorNoise = cnoise(vPosition * uNoiseScale * 0.5 + uTime * 0.2);
-    finalColor += uColor * colorNoise * 0.1; // Subtle color variation
+    finalColor += uColor * colorNoise * 0.1;
+
+    // Modifikasi warna/kecerahan berdasarkan level audio
+    finalColor *= (1.0 + uAudioLevel * 0.8); // Objek jadi lebih cerah dengan suara
+    finalColor += uColor * uAudioLevel * 0.5; // Tambah saturasi warna dengan suara
 
     // Apply brightness and darkness
     finalColor *= uBrightness;

@@ -4,7 +4,7 @@
 import {
   FaRobot,
   FaUser,
-  FaMicrophone,
+  // FaMicrophone, // DIHAPUS: Mikrofon tidak lagi di ChatBox
   FaPlus,
   FaChevronDown,
   FaGlobe,
@@ -19,7 +19,8 @@ import Image from "next/image";
 
 type Role = "user" | "bot" | "system";
 type Mode = "chat" | "image" | "reasoning" | "websearch" | "imagegen";
-type ExtendedMode = Mode | "stream";
+// type ExtendedMode = Mode | "stream"; // DIHAPUS: "stream" tidak lagi mode di ChatBox
+type ExtendedMode = Mode; // Hanya Mode yang tersisa
 
 type Message = {
   role: Role;
@@ -33,8 +34,8 @@ type Message = {
 type RequestBody = {
   prompt?: string;
   imageBase64?: string;
-  type: ExtendedMode;
-  audioBase64?: string;
+  type: ExtendedMode; // Type kini hanya Mode
+  // audioBase64?: string; // DIHAPUS: Audio tidak lagi dikirim dari sini
   userAddress?: string;
   userChain?: string;
 };
@@ -58,12 +59,12 @@ export default function ChatBox({ theme, userAddress, activeChain, isBackgroundT
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [mode, setMode] = useState<ExtendedMode>("chat");
-  const [isRecording, setIsRecording] = useState(false);
+  // const [isRecording, setIsRecording] = useState(false); // DIHAPUS: Tidak ada lagi rekaman di sini
   const [loading, setLoading] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  // const mediaRecorderRef = useRef<MediaRecorder | null>(null); // DIHAPUS
+  // const chunksRef = useRef<Blob[]>([]); // DIHAPUS
 
   const [showTools, setShowTools] = useState(false); 
 
@@ -99,7 +100,7 @@ export default function ChatBox({ theme, userAddress, activeChain, isBackgroundT
 
     const userMsg: Message = {
       role: "user",
-      content: input || (imageBase64 ? "[Image + prompt]" : "[Voice Message]"),
+      content: input || (imageBase64 ? "[Image + prompt]" : "[Pesan kosong]"), // Ubah pesan default
       timestamp: new Date(),
       senderAddress: userAddress,
       senderChain: activeChain,
@@ -112,7 +113,7 @@ export default function ChatBox({ theme, userAddress, activeChain, isBackgroundT
 
     const body: RequestBody = {
       prompt: input,
-      type: currentModeForRequest,
+      type: currentModeForRequest, // Type kini hanya Mode
       userAddress: userAddress,
       userChain: activeChain,
     };
@@ -183,11 +184,11 @@ export default function ChatBox({ theme, userAddress, activeChain, isBackgroundT
     setShowTools(false);
     setMessages((prev) => [
       ...prev,
-      { role: "system", content: `🔧 Switched to ${tool.toUpperCase()} mode.`, timestamp: new Date() },
+      { role: "system", content: `🔧 Switched to mode ${tool.toUpperCase()}.`, timestamp: new Date() },
     ]);
   };
 
-  const getIcon = (type: ExtendedMode) => {
+  const getIcon = (type: ExtendedMode) => { // Type kini hanya Mode
     switch (type) {
       case "image":
         return "🖼️";
@@ -197,155 +198,22 @@ export default function ChatBox({ theme, userAddress, activeChain, isBackgroundT
         return "🌐";
       case "imagegen":
         return "🎨";
-      case "stream":
-        return "🎤";
+      // case "stream": // DIHAPUS: Mode stream tidak ada lagi di ChatBox
+      //   return "🎤";
       default:
         return "🤖";
     }
   };
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-
-      chunksRef.current = [];
-      mediaRecorderRef.current = mediaRecorder;
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = handleSendAudio;
-      mediaRecorder.start();
-      setIsRecording(true);
-      setMessages((prev) => [
-        ...prev,
-        { role: "system", content: "🎤 Recording started...", timestamp: new Date() },
-      ]);
-    } catch (error: unknown) {
-      console.error("Error starting recording:", error);
-      setMessages((prev) => [
-        ...prev,
-        { role: "system", content: "❌ Failed to start recording. Please allow microphone access.", timestamp: new Date() },
-      ]);
-    }
-  };
-
-  const stopRecording = () => {
-    mediaRecorderRef.current?.stop();
-    setIsRecording(false);
-    setMessages((prev) => [
-      ...prev,
-      { role: "system", content: "🎤 Recording stopped. Processing audio...", timestamp: new Date() },
-    ]);
-  };
-
-  const handleSendAudio = async () => {
-    setLoading(true);
-    if (!userAddress) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "system", content: "⚠️ Please connect your Solana wallet before sending a voice message. Click 'Connect Wallet' in the header!", timestamp: new Date() },
-      ]);
-      setLoading(false);
-      return;
-    }
-
-    const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-    const arrayBuffer = await blob.arrayBuffer();
-    const pcmBuffer = await convertToPCM(arrayBuffer);
-    const audioBase64 = bufferToBase64(pcmBuffer);
-
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", content: "🎤 [Voice message sent]", timestamp: new Date(), senderAddress: userAddress, senderChain: activeChain },
-    ]);
-
-    try {
-      const res = await fetch("/api/groq/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "stream", audioBase64, userAddress, userChain: activeChain }),
-      });
-
-      const json = await res.json();
-      if (json.audioBase64) {
-        playBase64Audio(json.audioBase64);
-        setMessages((prev) => [
-          ...prev,
-          { role: "bot", content: "🎧 [Playing audio response...]", timestamp: new Date() },
-        ]);
-      } else if (json.message) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "bot", content: `${getIcon("stream")} ${json.message}`, timestamp: new Date() },
-        ]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          { role: "system", content: "❌ No response received from audio stream.", timestamp: new Date() },
-        ]);
-      }
-    } catch (error: unknown) {
-      console.error("Error streaming audio:", error);
-      setMessages((prev) => [
-        ...prev,
-        { role: "system", content: "❌ Failed to stream audio.", timestamp: new Date() },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const convertToPCM = async (buffer: ArrayBuffer): Promise<ArrayBuffer> => {
-    if (typeof window === 'undefined') {
-      console.warn("convertToPCM called on server, returning empty buffer.");
-      return new ArrayBuffer(0);
-    }
-
-    const AudioContext = (window as typeof globalThis & { AudioContext: new (contextOptions?: AudioContextOptions) => AudioContext }).AudioContext ||
-                         // @ts-expect-error error
-                         (window as typeof globalThis & { webkitAudioContext: new (contextOptions?: AudioContextOptions) => AudioContext }).webkitAudioContext;
-    const OfflineAudioContext = (window as typeof globalThis & { OfflineAudioContext: new (numberOfChannels: number, length: number, sampleRate: number) => OfflineAudioContext }).OfflineAudioContext ||
-                                // @ts-expect-error error
-                                (window as typeof globalThis & { webkitOfflineAudioContext: new (numberOfChannels: number, length: number, sampleRate: number) => OfflineAudioContext }).webkitOfflineAudioContext;
-
-    if (!AudioContext || !OfflineAudioContext) {
-      console.error("Web Audio API is not supported in this browser.");
-      return new ArrayBuffer(0);
-    }
-
-    const ctx = new OfflineAudioContext(1, 16000 * 3, 16000);
-    const decoded = await new AudioContext().decodeAudioData(buffer);
-    const source = ctx.createBufferSource();
-    source.buffer = decoded;
-    source.connect(ctx.destination);
-    source.start();
-    const rendered = await ctx.startRendering();
-    const float32 = rendered.getChannelData(0);
-
-    const int16 = new Int16Array(float32.length);
-    for (let i = 0; i < float32.length; i++) {
-      int16[i] = Math.max(-1, Math.min(1, float32[i])) * 32767;
-    }
-    return int16.buffer;
-  };
-
-  const bufferToBase64 = (buffer: ArrayBuffer) => {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
-  };
-
-  const playBase64Audio = (base64: string) => {
-    const audio = new Audio(`data:audio/wav;base64,${base64}`);
-    audio.play();
-  };
+  // DIHAPUS: Semua fungsi terkait mikrofon/audio dari ChatBox
+  /*
+  const startRecording = async () => { ... }
+  const stopRecording = () => { ... }
+  const handleSendAudio = async () => { ... }
+  const convertToPCM = async (buffer: ArrayBuffer): Promise<ArrayBuffer> => { ... }
+  const bufferToBase64 = (buffer: ArrayBuffer) => { ... }
+  const playBase64Audio = (base64: string) => { ... }
+  */
 
   const handleDownloadImage = (base64Image: string) => {
     const link = document.createElement('a');
@@ -390,10 +258,9 @@ export default function ChatBox({ theme, userAddress, activeChain, isBackgroundT
   }, [input, imagePreviewUrl]);
 
   // Warna tema dinamis
-  // FIX: Explicitly use isBackgroundTransparent for a class to silence the warning
   const transparencyClass = isBackgroundTransparent ? 'bg-opacity-85' : '';
   const bgColor = theme === "dark"
-    ? `bg-gray-900/${transparencyClass.replace('bg-opacity-', '')}` // Apply opacity directly to color
+    ? `bg-gray-900/${transparencyClass.replace('bg-opacity-', '')}`
     : `bg-white/${transparencyClass.replace('bg-opacity-', '')}`;
 
   const borderColor = theme === "dark" ? "border-gray-700" : "border-gray-200";
@@ -477,10 +344,10 @@ export default function ChatBox({ theme, userAddress, activeChain, isBackgroundT
                 <FaRobot />
               </span>
               {/* Modern Typing Indicator */}
-              <div className="flex space-x-1">
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></span>
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
+              <div className="animate-pulse flex space-x-2">
+                <div className="h-3 w-3 bg-gray-400 rounded-full"></div>
+                <div className="h-3 w-3 bg-gray-400 rounded-full"></div>
+                <div className="h-3 w-3 bg-gray-400 rounded-full"></div>
               </div>
             </div>
           </div>
@@ -493,7 +360,7 @@ export default function ChatBox({ theme, userAddress, activeChain, isBackgroundT
           <div className="relative w-32 h-32 mb-4 rounded-xl overflow-hidden border border-gray-400">
             <Image
               src={imagePreviewUrl}
-              alt="Image Preview"
+              alt="Pratinjau Gambar"
               layout="fill"
               objectFit="cover"
               className="rounded-xl"
@@ -501,7 +368,7 @@ export default function ChatBox({ theme, userAddress, activeChain, isBackgroundT
             <button
               onClick={clearImagePreview}
               className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 text-xs z-10 shadow-md hover:bg-red-600 transition"
-              title="Remove image"
+              title="Hapus gambar"
             >
               <FaTimesCircle />
             </button>
@@ -510,7 +377,7 @@ export default function ChatBox({ theme, userAddress, activeChain, isBackgroundT
 
         {mode !== "chat" && mode !== "image" && (
           <div className={`mb-3 py-1 px-3 rounded-full text-sm font-semibold flex items-center gap-2 ${activeModeBgColor} self-start`}>
-            {getIcon(mode)} {mode.toUpperCase()} Mode Active
+            {getIcon(mode)} Mode {mode.toUpperCase()} Aktif
           </div>
         )}
 
@@ -606,8 +473,8 @@ export default function ChatBox({ theme, userAddress, activeChain, isBackgroundT
               )}
             </div>
 
-            {/* Microphone Button */}
-            <button
+            {/* Microphone Button (removed from ChatBox) */}
+            {/* <button
               type="button"
               title={isRecording ? "Stop Recording" : "Start Voice Input"}
               onClick={isRecording ? stopRecording : startRecording}
@@ -616,7 +483,7 @@ export default function ChatBox({ theme, userAddress, activeChain, isBackgroundT
               }`}
             >
               <FaMicrophone />
-            </button>
+            </button> */}
           </div>
         </form>
       </div>

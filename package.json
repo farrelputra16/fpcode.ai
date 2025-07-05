@@ -9,10 +9,10 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@google/genai": "^1.7.0",
     "@react-three/drei": "^10.4.2",
     "@react-three/fiber": "^9.1.4",
     "@shadcn/ui": "^0.0.4",
+    "@solana/spl-token": "^0.4.13",
     "@solana/wallet-adapter-base": "^0.9.27",
     "@solana/wallet-adapter-react": "^0.15.39",
     "@solana/wallet-adapter-react-ui": "^0.9.39",
@@ -25,7 +25,9 @@
     "dotenv": "^16.5.0",
     "framer-motion": "^12.19.1",
     "groq-sdk": "^0.25.0",
+    "js-base64": "^3.7.7",
     "lucide-react": "^0.523.0",
+    "mime": "^4.0.7",
     "next": "15.3.4",
     "raw-loader": "^4.0.2",
     "react": "^19.0.0",
@@ -34,12 +36,14 @@
     "three": "^0.178.0",
     "utf-8-validate": "^6.0.5",
     "viem": "^2.31.6",
-    "wagmi": "^2.15.6"
+    "wagmi": "^2.15.6",
+    "wavefile": "^11.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@google/genai": "^1.8.0",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20.19.1",
+    "@types/node": "^20.19.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",

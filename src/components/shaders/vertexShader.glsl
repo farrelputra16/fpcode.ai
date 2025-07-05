@@ -4,6 +4,7 @@ uniform float uDistortionStrength;
 uniform float uNoiseScale;
 uniform float uBrightness;
 uniform float uDarkness;
+uniform float uAudioLevel; // <-- TAMBAHKAN INI
 varying vec3 vNormal; // Pass normal to fragment shader for lighting
 varying vec3 vPosition; // Pass position to fragment shader for effects
 
@@ -47,7 +48,6 @@ float cnoise(vec3 P) {
     vec3 g2 = normalize(vec3(gx.z,gy.z,gz.z));
     vec3 g3 = normalize(vec3(gx.w,gy.w,gz.w));
 
-    // --- FIX: Change Pf0.xyw to Pf0.xyz ---
     vec4 norm0 = taylorInvSqrt(vec4(dot(g0,Pf0.xyz), dot(g1,Pf1.xyz), dot(g2,Pf0.xyz), dot(g3,Pf1.xyz)));
     g0 *= norm0.x;
     g1 *= norm0.y;
@@ -57,7 +57,6 @@ float cnoise(vec3 P) {
     vec4 m = max(0.6 - vec4(dot(Pf0,Pf0), dot(Pf1,Pf1), dot(Pf0.xyz,Pf0.xyz), dot(Pf1.xyz,Pf1.xyz)), 0.0);
     m = m * m;
     m = m * m;
-    // --- FIX: Change Pf0.xyw to Pf0.xyz here as well ---
     vec4 px = vec4(dot(Pf0, g0), dot(Pf1, g1), dot(Pf0.xyz, g2), dot(Pf1.xyz, g3));
     return 42.0 * dot(m, px);
 }
@@ -68,7 +67,8 @@ void main() {
     vPosition = position; // Pass original position
 
     // Calculate noise based on position and time
-    float noise = cnoise(position * uNoiseScale + uTime * 0.5);
+    // Modifikasi noise berdasarkan level audio
+    float noise = cnoise(position * uNoiseScale + uTime * 0.5) * (1.0 + uAudioLevel * 0.5); // noise lebih kuat dengan suara
 
     // Apply distortion along the normal
     vec3 distortedPosition = position + normal * noise * uDistortionStrength;

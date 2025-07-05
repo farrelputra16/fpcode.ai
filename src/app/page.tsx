@@ -3,7 +3,7 @@
 
 import ChatBox from "@/components/ChatBox";
 import { useState, useEffect } from "react";
-import { FaSun, FaMoon, FaWallet, FaChevronDown, FaCrown } from "react-icons/fa";
+import { FaSun, FaMoon, FaWallet, FaChevronDown, FaCrown, FaMicrophone } from "react-icons/fa"; // FaLock dihapus
 import Image from "next/image";
 import { Orbitron } from "next/font/google";
 
@@ -14,14 +14,35 @@ import { solanaNetwork } from "@/components/SolanaProviders";
 
 import PremiumModal from "@/components/PremiumModal";
 import FuturisticBackground from "@/components/FuturisticBackground";
+import VoiceChatModule from "@/components/VoiceChatModule";
+
+// IMPOR TERKAIT TOKEN GATING DIHAPUS
+// import { PublicKey } from '@solana/web3.js';
+// import { getAssociatedTokenAddressSync } from '@solana/spl-token';
+// import { useConnection } from "@solana/wallet-adapter-react";
+
 
 const orbitron = Orbitron({ subsets: ["latin"], weight: ["500", "700"] });
+
+// KONFIGURASI TOKEN GATING DIHAPUS
+// const REQUIRED_TOKEN_MINT_ADDRESS = new PublicKey("GANTI_DENGAN_MINT_ADDRESS_TOKEN_ANDA_DI_MAINNET");
+// const REQUIRED_TOKEN_AMOUNT = 1;
+
 
 export default function Home() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [showWalletDropdown, setShowWalletDropdown] = useState(false);
   const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  // STATE TERKAIT TOKEN GATING DIHAPUS
+  // const [hasTokenAccess, setHasTokenAccess] = useState(false);
+  // const [checkingToken, setCheckingToken] = useState(false);
+  
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [voiceAudioLevel, setVoiceAudioLevel] = useState(0);
+
+  // useConnection DIHAPUS karena tidak lagi digunakan untuk token gating di sini
+  // const { connection } = useConnection();
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -42,6 +63,10 @@ export default function Home() {
 
   const activeUserAddress = isSolanaConnected && solanaPublicKey ? solanaPublicKey.toBase58() : undefined;
   const activeChain = isSolanaConnected ? `Solana (${solanaNetwork})` : 'None';
+
+  // useEffect TOKEN GATING DIHAPUS
+  // useEffect(() => { /* ... */ }, [isSolanaConnected, solanaPublicKey, connection]);
+
 
   const toggleTheme = () => {
     setTheme((prevTheme) => (prevTheme === "dark" ? "light" : "dark"));
@@ -69,10 +94,24 @@ export default function Home() {
     ? accentColor
     : walletButtonBaseColor;
 
+  // Lógica akses disederhanakan karena token gating dihapus.
+  // Sekarang hanya perlu terhubung ke dompet untuk akses.
+  const showChatAppContent = isSolanaConnected;
+  const showConnectMessage = !isSolanaConnected;
+  // Pesan loading dan denied dihapus karena tidak ada token gating
+  // const showCheckingMessage = isSolanaConnected && checkingToken;
+  // const showAccessDeniedMessage = isSolanaConnected && !checkingToken && !hasTokenAccess;
+
+
+  // Tombol Voice Mode
+  const voiceModeButtonClass = `p-2 rounded-full transition-colors duration-200 ${
+    isVoiceMode ? 'bg-blue-600 text-white hover:bg-blue-700' : (theme === 'dark' ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300')
+  }`;
+
   return (
     <div className={`min-h-screen flex flex-col ${primaryBgClass} ${textColor} relative`}>
-      {/* 3D Futuristic Background Component - will cover the entire page */}
-      <FuturisticBackground theme={theme} mousePosition={mousePosition} />
+      {/* 3D Futuristic Background Component - Menerima posisi mouse dan audio level */}
+      <FuturisticBackground theme={theme} mousePosition={mousePosition} audioLevel={isVoiceMode ? voiceAudioLevel : 0} />
 
       <header className={`relative z-10 flex items-center justify-between px-4 py-3 md:px-6 md:py-4 border-b ${headerBorderColor} ${headerBgColor} ${headerShadowClass}`}>
         <div className="text-xl md:text-2xl font-bold flex items-center gap-3">
@@ -80,14 +119,25 @@ export default function Home() {
           <span className={`tracking-wide ${fpcodeAiTextColor} ${orbitron.className}`}>fpcode.ai</span>
         </div>
         <div className="flex items-center gap-4">
+          {/* Tombol Voice Mode */}
+          {showChatAppContent && ( // Hanya tampilkan jika pengguna punya akses
+            <button
+              onClick={() => setIsVoiceMode(!isVoiceMode)}
+              className={`${voiceModeButtonClass}`}
+              title={isVoiceMode ? "Switch to Text Mode" : "Switch to Voice Mode"}
+            >
+              <FaMicrophone className="text-xl" />
+            </button>
+          )}
+
           {/* Responsive Premium Button */}
           <button
             onClick={() => setIsPremiumModalOpen(true)}
             className={`${premiumButtonColor} px-3 py-2 rounded-full transition-colors duration-200 flex items-center gap-2 text-sm md:text-base`}
             title="Get Premium Features"
           >
-            <FaCrown className="text-xl sm:text-base" /> {/* Icon always visible */}
-            <span className="hidden sm:inline">Premium</span> {/* Text hidden on small screens */}
+            <FaCrown className="text-xl sm:text-base" />
+            <span className="hidden sm:inline">Premium</span>
           </button>
 
           {/* Unified Responsive Wallet Connect/Disconnect Button */}
@@ -98,19 +148,19 @@ export default function Home() {
                 className={`${walletButtonBaseColor} px-3 py-2 rounded-full transition-colors duration-200 flex items-center gap-2 text-sm md:text-base`}
                 aria-label="Solana Wallet Options"
               >
-                <FaWallet className="text-xl sm:text-base" /> {/* Icon always visible */}
-                <span className="hidden sm:inline"> {/* Truncated key hidden on small screens */}
+                <FaWallet className="text-xl sm:text-base" />
+                <span className="hidden sm:inline">
                   {solanaPublicKey?.toBase58().substring(0, 4)}...{solanaPublicKey?.toBase58().substring(solanaPublicKey?.toBase58().length - 4)}
                 </span>
-                <FaChevronDown className={`ml-1 hidden sm:inline transition-transform ${showWalletDropdown ? 'rotate-180' : 'rotate-0'}`} /> {/* Arrow hidden on small screens */}
+                <FaChevronDown className={`ml-1 hidden sm:inline transition-transform ${showWalletDropdown ? 'rotate-180' : 'rotate-0'}`} />
               </button>
             ) : (
               <button
                 onClick={() => setSolanaModalVisible(true)}
-                className={`${walletButtonBaseColor} px-3 py-2 rounded-full transition-colors duration-200 flex items-center gap-2 text-sm md:text-base`}
+                className={`${walletButtonBaseColor} px-3 py-2 rounded-full transition-colors duration-200`}
               >
-                <FaWallet className="text-xl sm:text-base" /> {/* Icon always visible */}
-                <span className="hidden sm:inline">Connect Wallet</span> {/* Text hidden on small screens */}
+                <FaWallet className="text-xl sm:text-base" />
+                <span className="hidden sm:inline">Connect Wallet</span>
               </button>
             )}
 
@@ -137,7 +187,26 @@ export default function Home() {
       <main className="relative z-10 flex-grow flex justify-center items-stretch py-4 md:py-8 px-4 sm:px-6 lg:px-8 bg-transparent">
         <div className="w-full max-w-5xl h-[calc(100vh-160px)] flex flex-col">
           <section className="flex-grow flex flex-col min-h-0">
-            <ChatBox theme={theme} userAddress={activeUserAddress} activeChain={activeChain} isBackgroundTransparent={true} />
+            {showChatAppContent ? ( // Hanya tampilkan konten aplikasi jika dompet terhubung
+              isVoiceMode ? (
+                <VoiceChatModule
+                  theme={theme}
+                  onRecordingChange={(recording) => console.log('Recording state:', recording)}
+                  onStatusChange={(statusMsg) => console.log('Voice status:', statusMsg)}
+                  onAudioLevelChange={setVoiceAudioLevel}
+                />
+              ) : (
+                <ChatBox theme={theme} userAddress={activeUserAddress} activeChain={activeChain} isBackgroundTransparent={true} />
+              )
+            ) : ( // Pesan untuk menghubungkan dompet
+              <div className={`flex flex-col items-center justify-center h-full rounded-xl shadow-xl border ${borderColor} ${theme === 'dark' ? 'bg-gray-900/85' : 'bg-white/85'} ${textColor}`}>
+                <FaWallet className="text-6xl mb-4 text-blue-500" /> {/* FIX: Use FaWallet here */}
+                {showConnectMessage && (
+                  <p className="text-lg text-center">Please connect your wallet to access the app.</p>
+                )}
+                {/* Pesan token gating lainnya dihapus */}
+              </div>
+            )}
           </section>
         </div>
       </main>

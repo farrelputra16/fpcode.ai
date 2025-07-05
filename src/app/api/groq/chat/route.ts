@@ -1,45 +1,86 @@
 // src/app/api/groq/chat/route.ts
+import { GoogleGenAI } from '@google/genai';
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
-import { GoogleGenAI, Modality } from "@google/genai";
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY ?? "",
 });
 
-export async function POST(req: Request) {
-  const { prompt, type, imageBase64, audioBase64, userAddress, userChain }: {
-    prompt?: string;
-    type: "chat" | "image" | "reasoning" | "websearch" | "imagegen" | "stream";
-    imageBase64?: string;
-    audioBase64?: string;
-    userAddress?: string; // Alamat dompet Solana
-    userChain?: string; // Akan selalu "Solana" atau nama jaringan Solana
-  } = await req.json();
+if (!process.env.GEMINI_API_KEY) {
+  console.warn("GEMINI_API_KEY is not set in environment variables. Gemini Live features will not work.");
+}
 
-  // Validasi kehadiran userAddress (alamat dompet Solana)
-  if (!userAddress) {
-    return NextResponse.json({ message: "Alamat dompet Solana pengguna diperlukan." }, { status: 400 });
-  }
-  // userChain akan selalu menjadi Solana, jadi validasi ini bisa disederhanakan
-  // atau digunakan untuk logging saja.
-  if (!userChain || !userChain.includes("Solana")) { // Memastikan ini adalah rantai Solana
-    console.warn(`Peringatan: userChain tidak menunjukkan Solana: ${userChain}`);
-  }
-
-
-  if (!process.env.GROQ_API_KEY) {
-    return NextResponse.json({ message: "Missing GROQ_API_KEY" }, { status: 500 });
+export async function GET() {
+  if (!process.env.GEMINI_API_KEY) {
+    return NextResponse.json({ error: "Missing GEMINI_API_KEY for token generation." }, { status: 500 });
   }
 
   try {
-    // Anda dapat menggunakan userAddress dan userChain untuk logging di sini,
-    // mis., console.log(`Permintaan dari ${userAddress} di ${userChain} untuk tipe: ${type}`);
+    const aiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-    // 🖼️ ANALISIS GAMBAR
+    const newSessionExpireTime = new Date(Date.now() + 1 * 60 * 1000); // 1 minute
+    const expireTime = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+    // The result of create() is the AuthToken object itself
+    const authTokenResult = await aiClient.authTokens.create({
+      config: {
+        uses: 1,
+        expireTime: expireTime.toISOString(),
+        newSessionExpireTime: newSessionExpireTime.toISOString(),
+        httpOptions: { apiVersion: 'v1alpha' },
+      },
+    });
+
+    // FIX: Access the 'name' property directly from authTokenResult (which is the AuthToken)
+    // Validate that authTokenResult exists and has a 'name' property which is a string.
+    if (!authTokenResult || typeof authTokenResult.name !== 'string') {
+        console.error("Unexpected token response structure:", JSON.stringify(authTokenResult, null, 2));
+        throw new Error('Invalid token response structure from GoogleGenAI. Expected "name" property on AuthToken.');
+    }
+
+    // Return the actual token string from authTokenResult.name
+    return NextResponse.json({ token: authTokenResult.name });
+
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Error generating ephemeral token:', errorMessage);
+    return NextResponse.json({
+        error: `Failed to generate ephemeral token: ${errorMessage}. Please verify your GEMINI_API_KEY, and ensure @google/genai SDK is up-to-date and correctly installed.`
+    }, { status: 500 });
+  }
+}
+
+/**
+ * POST method: Menangani berbagai interaksi AI berbasis teks (dan gambar) menggunakan GROQ.
+ */
+export async function POST(req: Request) {
+  const { prompt, type, imageBase64, userAddress, userChain }: {
+    prompt?: string;
+    type: "chat" | "image" | "reasoning" | "websearch" | "imagegen" | "stream";
+    imageBase64?: string;
+    userAddress?: string;
+    userChain?: string;
+  } = await req.json();
+
+  if (!userAddress) {
+    return NextResponse.json({ message: "User wallet address is required." }, { status: 400 });
+  }
+  if (!userChain || !userChain.includes("Solana")) {
+    console.warn(`Warning: userChain does not indicate Solana: ${userChain}`);
+  }
+
+  if (!process.env.GROQ_API_KEY) {
+    return NextResponse.json({ message: "Missing GROQ_API_KEY for Groq features." }, { status: 500 });
+  }
+
+  try {
+    // --- Logika untuk berbagai tipe request (menggunakan Groq) ---
+
+    // 🖼️ ANALISIS GAMBAR (GROQ)
     if (type === "image") {
       if (!imageBase64 || !prompt) {
-        return NextResponse.json({ message: "Gambar atau prompt tidak ada" }, { status: 400 });
+        return NextResponse.json({ message: "Image or prompt is missing for image analysis." }, { status: 400 });
       }
 
       const result = await groq.chat.completions.create({
@@ -67,7 +108,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: result.choices[0].message.content });
     }
 
-    // 🧠 PENALARAN
+    // 🧠 PENALARAN (GROQ)
     if (type === "reasoning") {
       const result = await groq.chat.completions.create({
         model: "deepseek-r1-distill-llama-70b",
@@ -81,7 +122,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: result.choices[0].message.content });
     }
 
-    // 🌐 PENCARIAN WEB
+    // 🌐 PENCARIAN WEB (GROQ)
     if (type === "websearch") {
       const result = await groq.chat.completions.create({
         model: "compound-beta",
@@ -91,22 +132,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: result.choices[0].message.content });
     }
 
-    // 🎨 PEMBUATAN GAMBAR (GEMINI)
+    // 🎨 PEMBUATAN GAMBAR (GEMINI - menggunakan API Key biasa, bukan Live API)
     if (type === "imagegen") {
       if (!process.env.GEMINI_API_KEY) {
-        return NextResponse.json({ message: "Missing GEMINI_API_KEY" }, { status: 500 });
+        return NextResponse.json({ message: "Missing GEMINI_API_KEY for image generation." }, { status: 500 });
       }
 
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-      const contents = prompt ?? "A futuristic city";
-
+      // FIX: Menggunakan ai.models.generateContent langsung.
+      // Model 'gemini-2.0-flash-preview-image-generation' harus kompatibel dengan generateContent.
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-preview-image-generation",
-        contents,
-        config: {
-          responseModalities: [Modality.TEXT, Modality.IMAGE],
-        }
+        model: "gemini-2.0-flash-preview-image-generation", // Pastikan model ini valid untuk generateContent
+        contents: [{ role: "user", parts: [{ text: prompt ?? "A futuristic city" }] }],
       });
 
       type ImagePart = {
@@ -119,52 +156,32 @@ export async function POST(req: Request) {
       const imagePart = response?.candidates?.[0]?.content?.parts?.find(
         (part): part is ImagePart =>
           typeof part === "object" &&
-          !!part.inlineData?.mimeType &&
+          'inlineData' in part &&
+          typeof part.inlineData === 'object' &&
+          !!part.inlineData.mimeType &&
           part.inlineData.mimeType.startsWith("image")
       );
 
       const base64Image = imagePart?.inlineData?.data;
 
       if (!base64Image) {
-        return NextResponse.json({ message: "❌ Tidak ada gambar yang dikembalikan dari Gemini." }, { status: 500 });
+        return NextResponse.json({ message: "❌ No image returned from Gemini." }, { status: 500 });
       }
 
       return NextResponse.json({
-        message: "🧑‍🎨 Gambar berhasil dibuat.",
+        message: "🧑‍🎨 Image successfully generated.",
         imageBase64: base64Image,
       });
     }
 
-    // 🎤 STREAM AUDIO (Speech-to-Text & Text-to-Speech)
     if (type === "stream") {
-      if (!audioBase64) {
-        return NextResponse.json({ message: "Data audio tidak ada untuk tipe stream" }, { status: 400 });
-      }
-      // Anda perlu mengimplementasikan logika STT (Speech-to-Text) dan TTS (Text-to-Speech) Anda di sini.
-      // Contoh:
-      // 1. Kirim audioBase64 ke layanan STT (misalnya, speech-to-text Groq, Whisper OpenAI, Google Cloud Speech-to-Text).
-      //    Ini akan mengubah audio menjadi teks.
-      // 2. Ambil teks yang ditranskripsi dan kirimkan ke model chat Anda (misalnya, llama-3.3-70b-versatile Groq).
-      // 3. Ambil respons tekstual AI dan kirimkan ke layanan TTS (misalnya, Google Cloud Text-to-Speech, ElevenLabs, atau TTS eksperimental Groq).
-      //    Ini akan mengubah respons teks menjadi audio.
-      // 4. Kembalikan audioBase64.
-
-      // Placeholder untuk logika STT dan TTS
-      const transcribedText = "Ini adalah placeholder untuk audio yang Anda transkripsi."; // Ganti dengan STT aktual
-      const aiResponse = `Saya mendengar Anda berkata: "${transcribedText}". Saya merespons dari ${userChain}.`; // Ganti dengan respons chat AI aktual
-      const responseAudioBase64 = "YOUR_TTS_AUDIO_BASE64_HERE"; // Ganti dengan output TTS aktual
-
-      return NextResponse.json({
-        message: aiResponse,
-        audioBase64: responseAudioBase64,
-      });
+      return NextResponse.json({ error: "Voice stream processing is now handled directly by Gemini Live API from the frontend. This endpoint is not used for that purpose." }, { status: 400 });
     }
 
-    // 🤖 CHAT DEFAULT
     const chat = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       messages: [
-        { role: "system", content: "Anda adalah asisten yang membantu." },
+        { role: "system", content: "You are a helpful assistant." },
         { role: "user", content: prompt || "" },
       ],
     });
@@ -172,8 +189,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: chat.choices[0].message.content });
 
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : "Kesalahan tidak dikenal";
-    console.error("Kesalahan API:", err); // Log kesalahan lengkap untuk debugging
-    return NextResponse.json({ message: `❌ Kesalahan: ${errorMessage}` }, { status: 500 });
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error("API error in POST /api/groq/chat:", errorMessage);
+    return NextResponse.json({ message: `❌ Error: ${errorMessage}` }, { status: 500 });
   }
 }
