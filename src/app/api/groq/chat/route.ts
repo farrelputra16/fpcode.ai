@@ -7,12 +7,12 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY ?? "",
 });
 
-if (!process.env.GEMINI_API_KEY) {
+if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
   console.warn("GEMINI_API_KEY is not set in environment variables. Gemini Live features will not work.");
 }
 
 export async function GET() {
-  if (!process.env.GEMINI_API_KEY) {
+  if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
     return NextResponse.json({ error: "Missing GEMINI_API_KEY for token generation." }, { status: 500 });
   }
 
@@ -134,7 +134,7 @@ export async function POST(req: Request) {
 
     // 🎨 PEMBUATAN GAMBAR (GEMINI - menggunakan API Key biasa, bukan Live API)
     if (type === "imagegen") {
-      if (!process.env.GEMINI_API_KEY) {
+      if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
         return NextResponse.json({ message: "Missing GEMINI_API_KEY for image generation." }, { status: 500 });
       }
 
