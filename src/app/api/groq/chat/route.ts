@@ -1,5 +1,5 @@
 // src/app/api/groq/chat/route.ts
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Modality } from '@google/genai';
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
 
@@ -7,12 +7,12 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY ?? "",
 });
 
-if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
+if (!process.env.GEMINI_API_KEY) {
   console.warn("GEMINI_API_KEY is not set in environment variables. Gemini Live features will not work.");
 }
 
 export async function GET() {
-  if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
     return NextResponse.json({ error: "Missing GEMINI_API_KEY for token generation." }, { status: 500 });
   }
 
@@ -134,16 +134,19 @@ export async function POST(req: Request) {
 
     // 🎨 PEMBUATAN GAMBAR (GEMINI - menggunakan API Key biasa, bukan Live API)
     if (type === "imagegen") {
-      if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
+      if (!process.env.GEMINI_API_KEY) {
         return NextResponse.json({ message: "Missing GEMINI_API_KEY for image generation." }, { status: 500 });
       }
 
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      // FIX: Menggunakan ai.models.generateContent langsung.
-      // Model 'gemini-2.0-flash-preview-image-generation' harus kompatibel dengan generateContent.
+      
+      // FIX: Menambahkan 'config' dengan 'responseModalities' seperti contoh Anda
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-preview-image-generation", // Pastikan model ini valid untuk generateContent
+        model: "gemini-2.0-flash-preview-image-generation",
         contents: [{ role: "user", parts: [{ text: prompt ?? "A futuristic city" }] }],
+        config: { // Tambahkan bagian konfigurasi ini
+          responseModalities: [Modality.TEXT, Modality.IMAGE],
+        },
       });
 
       type ImagePart = {
@@ -172,8 +175,8 @@ export async function POST(req: Request) {
         message: "🧑‍🎨 Image successfully generated.",
         imageBase64: base64Image,
       });
+  
     }
-
     if (type === "stream") {
       return NextResponse.json({ error: "Voice stream processing is now handled directly by Gemini Live API from the frontend. This endpoint is not used for that purpose." }, { status: 400 });
     }
